@@ -1,0 +1,9 @@
+import type { Metadata } from "next";
+import { LegalPage } from "@/components/legal-page";
+export const metadata: Metadata = { title: "Refund policy" };
+export default function RefundPage() { return <LegalPage eyebrow="Platform policies" title="Refund policy" copy="Membership is reviewed manually. Please read this policy before submitting payment." sections={[
+  {title:"Before paying",body:"Check the current plan, amount, duration, UPI ID and payee name displayed in the application before making a transfer. If any detail is missing or looks incorrect, do not pay; contact the platform operator first."},
+  {title:"Verification and duplicate transfers",body:"After paying, submit the correct UTR/reference and payment date. The request remains pending while an administrator checks the actual credit. Do not make an additional payment to resolve a pending request unless support asks you to. If you believe a transfer was duplicated or sent to incorrect details, contact the receiving UPI account holder and platform support promptly."},
+  {title:"Refund requests",body:"To request a refund or report a failed/duplicate transfer, contact the support number shown on the payment page and include your registered email, plan, amount, payment date and UTR. Do not send passwords, OTPs, card details or unrelated identity documents. The platform operator will review the request and respond using the configured support process."},
+  {title:"Applicable law",body:"This initial policy is a product template, not a legal determination of refund rights. The platform operator must publish its legal business identity, support contact, tax treatment, cancellation rules and any statutory rights applicable in India before collecting live payments. Nothing in this policy limits rights that cannot legally be waived."}
+]}/>; }

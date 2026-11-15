@@ -1,0 +1,5 @@
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/server/auth";
+import { DashboardShell } from "@/components/dashboard-shell";
+export const dynamic="force-dynamic";
+export default async function AdminLayout({children}:{children:React.ReactNode}){let user=null;try{user=await getCurrentUser();}catch{}if(!user)redirect("/login");if(user.role!=="ADMIN"&&user.role!=="DEVELOPER")redirect("/dashboard");return <DashboardShell user={user}>{children}</DashboardShell>;}
