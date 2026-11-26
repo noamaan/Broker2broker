@@ -1,4 +1,5 @@
 import "server-only";
+import { deliverQueuedPush } from "./push";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import nodemailer from "nodemailer";
 import { backendError, BackendError } from "./errors";
@@ -45,7 +46,7 @@ async function securityLog(actorID: string, eventType: string, subject: string, 
 const RATE_LIMITS: Record<string, [number, number]> = {
   "auth.getByEmail": [12, 600], "auth.register": [6, 3600], "auth.reset.request": [4, 3600],
   "auth.reset.complete": [6, 3600], "auth.changePassword": [6, 3600], "ai.context": [12, 60],
-  "payment.createRequest": [6, 3600], "listings.search": [60, 60], "files.upload": [12, 3600]
+  "payment.createRequest": [6, 3600], "push.rate": [20, 3600], "enquiries.create": [15, 3600], "listings.public": [120, 60], "files.public": [240, 60], "listings.search": [60, 60], "files.upload": [12, 3600]
 };
 async function rateLimit(action: string, data: Data) {
   const subject = str(data.actorID || data.rateKey || data.email || data.token || data.userID || data.fileID || "server").toLowerCase().slice(0, 120);
@@ -192,7 +193,7 @@ function publicPaymentRequest(row: Row) {
 function publicListingFields(row: Row): Omit<Listing, "broker"> {
   const due = dateString(row.reconfirm_due_at);
   return {
-    listingID: str(row.listing_id), ownerID: str(row.owner_id), title: str(row.title), transactionType: str(row.transaction_type),
+    isPublic: row.is_public === true, listingID: str(row.listing_id), ownerID: str(row.owner_id), title: str(row.title), transactionType: str(row.transaction_type),
     propertyType: str(row.property_type), bhk: str(row.bhk), city: str(row.city), locality: str(row.locality), landmark: str(row.landmark),
     carpetArea: str(row.carpet_area), builtUpArea: str(row.built_up_area), furnishing: str(row.furnishing, "NOT_SPECIFIED"), floor: str(row.floor),
     amenities: arr(row.amenities).map(String), price: num(row.price), rent: num(row.rent), deposit: num(row.deposit), availability: str(row.availability),
@@ -254,7 +255,7 @@ function listingData(input: Data) {
   const contacts = listField("contactNumbers", 10, 24);
   if (contacts.some((value) => !/^\+?[0-9][0-9\s().-]{7,19}$/.test(value))) throw backendError("INVALID_INPUT", "Invalid contact number.");
   return {
-    title: text("title", 140, true), transaction_type: transaction, property_type: text("propertyType", 80, true), bhk: text("bhk", 20),
+    is_public: input.isPublic === true, title: text("title", 140, true), transaction_type: transaction, property_type: text("propertyType", 80, true), bhk: text("bhk", 20),
     city: text("city", 80, true), locality: text("locality", 100, true), landmark: text("landmark", 120), carpet_area: text("carpetArea", 40),
     built_up_area: text("builtUpArea", 40), furnishing, floor: text("floor", 40), amenities, price: numberField("price"), rent: numberField("rent"),
     deposit: numberField("deposit"), availability: text("availability", 80), tenant_preference: text("tenantPreference", 100),
@@ -411,6 +412,27 @@ async function getFile(actorID: string, fileID: string) {
   const bytes = Buffer.from(await download.data.arrayBuffer());
   if (bytes.byteLength > 2_700_000) throw backendError("INVALID_INPUT", "Stored image exceeds the file limit.");
   return { fileName: str(file.file_name), mimeType: str(file.mime_type), base64: bytes.toString("base64") };
+}
+
+// Public previews deliberately exclude broker identities, free-form notes and contact fields.
+function publicPreviewText(value: unknown) {
+  return str(value).replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[hidden]").replace(/(?:\+?\d[\d\s().-]{7,}\d)/g, "[hidden]");
+}
+function previewListing(row: Row) {
+  return { listingID: str(row.listing_id), propertyType: publicPreviewText(row.property_type), bhk: publicPreviewText(row.bhk), city: publicPreviewText(row.city), locality: publicPreviewText(row.locality), transactionType: str(row.transaction_type), price: num(row.price), rent: num(row.rent), images: arr(row.images).map(String) };
+}
+async function publicFile(listingID: string, fileID: string) {
+  const listing = await one("listings", "listing_id", listingID);
+  if (!listing || listing.is_public !== true || listing.status !== "ACTIVE" || !(Date.parse(str(listing.reconfirm_due_at)) > Date.now()) || !arr(listing.images).includes(fileID)) throw backendError("NOT_FOUND", "Image was not found.");
+  const owner = await getUserRow(str(listing.owner_id));
+  if (!owner || owner.account_status !== "ACTIVE") throw backendError("NOT_FOUND", "Image was not found.");
+  const file = await one("file_assets", "file_id", fileID);
+  if (!file || file.active !== true || file.purpose !== "LISTING_IMAGE" || str(file.related_id) !== listingID || str(file.owner_id) !== str(listing.owner_id)) throw backendError("NOT_FOUND", "Image was not found.");
+  const download = await supabaseAdmin().storage.from(str(file.bucket, APP_BUCKET)).download(str(file.storage_path));
+  if (download.error || !download.data) throw backendError("NOT_FOUND", "Image was not found.");
+  const bytes = Buffer.from(await download.data.arrayBuffer());
+  if (bytes.byteLength > 2_700_000) throw backendError("INVALID_INPUT", "Stored image exceeds the file limit.");
+  return { mimeType: str(file.mime_type), base64: bytes.toString("base64") };
 }
 
 async function dispatch(action: string, data: Data): Promise<unknown> {
@@ -672,6 +694,53 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       }));
       if (result.request) return { request: publicPaymentRequest(result.request), ...(result.payment_id ? { paymentID: result.payment_id, subscriptionID: result.subscription_id, startsAt: dateString(result.starts_at), expiresAt: dateString(result.expires_at) } : {}) };
       return result;
+    }
+    case "listings.public": {
+      const page = clampPage(data.page, 1, 100000), limit = 18;
+      const q = str(data.q).trim().slice(0, 80);
+      const city = str(data.city).trim().slice(0, 80);
+      const bhk = str(data.bhk).trim().slice(0, 20);
+      const transaction = str(data.transactionType).trim();
+      if ((q && !/^[\p{L}\p{N} .'-]+$/u.test(q)) || (city && !/^[\p{L}\p{N} .'-]+$/u.test(city)) || (bhk && !/^[a-zA-Z0-9 ]+$/.test(bhk))) throw backendError("INVALID_INPUT", "Enter a valid search term.");
+      let query = client.from("listings").select("listing_id,property_type,bhk,city,locality,transaction_type,price,rent,images,created_at,users!inner(account_status)").eq("is_public", true).eq("status", "ACTIVE").gt("reconfirm_due_at", NOW()).eq("users.account_status", "ACTIVE").order("created_at", { ascending: false });
+      if (q) query = query.ilike("locality", `%${q}%`);
+      if (city) query = query.ilike("city", `%${city}%`);
+      if (bhk) query = query.ilike("bhk", `%${bhk}%`);
+      if (transaction) {
+        if (!["RENT", "SALE", "RESALE", "HEAVY_DEPOSIT", "LEASE", "COMMERCIAL_RENT", "COMMERCIAL_SALE"].includes(transaction)) throw backendError("INVALID_INPUT", "Invalid transaction type.");
+        query = query.eq("transaction_type", transaction);
+      }
+      const maxPrice = str(data.maxPrice);
+      if (maxPrice) {
+        const amount = Number(maxPrice);
+        if (!Number.isFinite(amount) || amount < 0 || amount > 1000000000000) throw backendError("INVALID_INPUT", "Enter a valid maximum price.");
+        if (!transaction) query = query.or(`and(transaction_type.in.(RENT,COMMERCIAL_RENT),rent.lte.${amount}),and(transaction_type.not.in.(RENT,COMMERCIAL_RENT),price.lte.${amount})`);
+        else query = query.lte(transaction === "RENT" || transaction === "COMMERCIAL_RENT" ? "rent" : "price", amount);
+      }
+      const rows = await dbResult<Row[]>(query.range((page-1)*limit, page*limit));
+      return { items: rows.slice(0,limit).map(previewListing), page, hasMore: rows.length > limit };
+    }
+    case "files.public": return publicFile(str(data.listingID), str(data.fileID));
+    case "push.rate": return { ok: true };
+    case "enquiries.create": {
+      const actor = await requireMember(str(data.actorID));
+      const enquiryID = await dbResult<string>(client.rpc("b2b_create_enquiry", { p_actor_id: str(actor.user_id), p_listing_id: str(data.listingID), p_message: str(data.message) }));
+      // Delivery is best-effort; the enquiry and in-app notification are already committed.
+      try { await deliverQueuedPush(); } catch (error) { console.error("Push delivery failed", error instanceof Error ? error.message : "unknown"); }
+      return { enquiryID };
+    }
+    case "enquiries.list": {
+      const actor = await requireMember(str(data.actorID));
+      const direction = data.direction === "sent" ? "sent" : "received";
+      const column = direction === "sent" ? "sender_id" : "recipient_id";
+      const page = clampPage(data.page, 1, 100000), limit = 20;
+      const rows = await dbResult<Row[]>(client.from("enquiries").select("enquiry_id,listing_id,sender_id,recipient_id,message,created_at").eq(column, actor.user_id).order("created_at", { ascending: false }).range((page-1)*limit, page*limit));
+      const visible = rows.slice(0,limit);
+      const brokers = await brokerSummaries(visible.map(row => str(direction === "sent" ? row.recipient_id : row.sender_id)));
+      const listingIDs = [...new Set(visible.map(row => str(row.listing_id)))];
+      const listings = listingIDs.length ? await dbResult<Row[]>(client.from("listings").select("listing_id,title").in("listing_id", listingIDs)) : [];
+      const titles = new Map(listings.map(row => [str(row.listing_id), str(row.title)]));
+      return { items: visible.map(row => ({ enquiryID: str(row.enquiry_id), listingID: str(row.listing_id), listingTitle: titles.get(str(row.listing_id)) || "Property", message: str(row.message), createdAt: dateString(row.created_at), broker: brokers.get(str(direction === "sent" ? row.recipient_id : row.sender_id)) || null })), page, hasMore: rows.length > limit };
     }
     case "brokers.directory": {
       const actor = await requireRole(str(data.actorID), ["USER", "ADMIN", "DEVELOPER"]);
@@ -1001,7 +1070,7 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
     }
     case "developer.health": {
       await requireDeveloper(str(data.actorID));
-      const tables = ["users", "broker_profiles", "listings", "payment_requests", "payments", "subscriptions", "categories", "localities", "favourites", "reports", "notifications", "admins", "developers", "settings", "audit_logs", "security_logs", "file_assets", "platform_config", "rate_limit_events", "database_backups"];
+      const tables = ["users", "broker_profiles", "listings", "payment_requests", "payments", "subscriptions", "categories", "localities", "favourites", "reports", "notifications", "admins", "developers", "settings", "audit_logs", "security_logs", "file_assets", "platform_config", "rate_limit_events", "database_backups", "enquiries", "push_subscriptions", "push_queue"];
       const checks = await Promise.all(tables.map(async (table) => {
         try { await dbResult(supabaseAdmin().from(table).select("*").limit(0)); return { table, ok: true }; }
         catch { return { table, ok: false }; }
@@ -1027,7 +1096,9 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       const count = await dbResult<number>(client.rpc("b2b_reconfirm_due_listings"));
       const reminders = await dbResult<number>(client.rpc("b2b_membership_reminders"));
       const backup = await createBackup("SYSTEM");
-      return { reconfirmed: num(count), membershipReminders: num(reminders), backup };
+      let push = { configured: false, delivered: 0, failed: 0 };
+      try { push = await deliverQueuedPush(); } catch (error) { console.error("Push delivery failed", error instanceof Error ? error.message : "unknown"); }
+      return { reconfirmed: num(count), membershipReminders: num(reminders), backup, push };
     }
     case "files.upload": return uploadFile(str(data.actorID), data);
     case "files.get": return getFile(str(data.actorID), str(data.fileID));

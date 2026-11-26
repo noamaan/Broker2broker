@@ -1,6 +1,8 @@
 # Deployment and first-run checklist
 
 **Status (2026-11-26):** The connected Supabase project `dfubbzyaoiwbbvkacwic` reports ACTIVE_HEALTHY; the three original migrations are present. The fixed-monthly and reminder migrations were applied and a production deployment was promoted. Existing user, listing and payment row counts remained unchanged. Full end-to-end testing remains outstanding. Do not send passwords or API keys in chat.
+**Pending branch changes:** `20261126230000_public_listings_enquiries.sql` and `20261126230100_web_push.sql` have not been applied to the connected production database. Test both against an isolated Supabase project first. Apply them in order before deploying this branch; do not deploy code that expects these tables/columns first. The existing production release is unchanged until then. Verify migration history and take a recovery-ready backup before any production change.
+
 ## 1. Configure Supabase server access
 
 1. Open the Supabase project `Broker2Broker` (`dfubbzyaoiwbbvkacwic`) in the existing organization.
@@ -21,6 +23,7 @@ Create `.env.local` for development or set these under the hosting provider's **
 | `APP_BASE_URL` | Yes for reset links | Exact public HTTPS origin, no trailing slash. Use `http://localhost:3000` only for local development. |
 | `CRON_SECRET` | Yes for scheduled tasks | Separate random value of at least 32 bytes. Vercel sends it as `Authorization: Bearer ...` to the daily cron route. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM` | Needed for password reset | SMTP delivery configuration. Set credentials only on the server; port defaults to 587. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Optional for Web Push | Generate a unique VAPID pair with `npx web-push generate-vapid-keys`; set the public and private values in server environment variables, and set the subject to a real `mailto:` contact or HTTPS URL. Never commit the private key. Keep the pair stable; rotation requires users to re-subscribe. |
 | `AI_API_KEY` | Optional | Server-only key for an OpenAI-compatible chat-completions service. |
 | `AI_MODEL` | Optional | Model identifier supported by that provider. |
 | `AI_BASE_URL` | Optional | HTTPS chat-completions endpoint. If omitted, the app uses the default endpoint. |
@@ -74,7 +77,11 @@ GitHub Pages is not a backend host and is not suitable for this full app.
 
 - Live registration, authentication, payment submission/approval, duplicate-reference handling, membership expiry and authorization must be tested against an isolated working database. The production database is healthy, but safe isolated end-to-end tests have not been completed.
 - Member submissions and reconfirmations now enter pending approval in this branch; end-to-end testing, including concurrent edits and moderation, is still required before rollout.
-- Listings are currently private to active members; anonymous public property browsing, a dedicated enquiries workflow and web push delivery/subscriptions are not implemented. The in-app renewal reminder migration is applied but has not been tested with the live cron.
+- This branch adds opt-in anonymous previews, member-only enquiries and consent-based web push. The two new migrations and VAPID settings are not applied/configured in production. Existing listings stay private by default; opt-in owners must review photos and metadata. In-app renewal reminders were applied earlier but live cron remains untested. Push is queued and processed on enquiries or the daily cron, at most 50 jobs per invocation; delivery is best-effort, not immediate or guaranteed.
 - The fixed ₹199/30-day monthly plan is implemented in the application and database; the existing configurable annual plan remains. Historical payments and memberships were not changed by the migration.
 - Complete real-device install/offline tests and notification tests once implemented. Verify privacy/consent for directory visibility and phone sharing, and the accuracy of the legal pages, before inviting brokers.
 - `npm audit --omit=dev` reported two moderate dependency advisories (exceljs/uuid); review compatible upgrades before rollout.
+
+## Push rollout and operations
+
+Set VAPID keys only in the deployment environment after isolated end-to-end testing, and verify the key pair matches. Push subscriptions belong to one account per browser and may be disabled from Notifications before sign-out; lock-screen content is generic. The database queue stores notification references but not message content. The service deletes subscriptions on 404/410, and transient delivery failures are retried with a lease, up to five attempts. The daily cron processes up to 50 jobs per run, so backlogs can take days; enquiries also trigger a best-effort batch. Monitor backlog, cron failures, and provider errors; do not claim guaranteed or real-time delivery. Push endpoints are restricted to supported browser providers. Push subscription secrets are not included in snapshots; enquiries are included. Check the secure private backup policy before migration.

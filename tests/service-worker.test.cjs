@@ -7,10 +7,11 @@ function worker(fetchImpl = async () => 'online') {
   const handlers = {};
   const cached = [];
   const deleted = [];
-  const self = { location: { origin: 'https://example.test' }, clients: { claim: async () => {} }, skipWaiting: async () => {}, addEventListener: (name, fn) => { handlers[name] = fn; } };
+  const notices = [];
+  const self = { registration: { showNotification: async (title, options) => notices.push({ title, options }) }, location: { origin: 'https://example.test' }, clients: { claim: async () => {} }, skipWaiting: async () => {}, addEventListener: (name, fn) => { handlers[name] = fn; } };
   const caches = { open: async () => ({ add: async path => cached.push(path) }), keys: async () => ['b2b-offline-old', 'other-cache'], delete: async name => deleted.push(name), match: async path => path === '/offline.html' ? 'offline fallback' : undefined };
   vm.runInNewContext(fs.readFileSync('public/sw.js', 'utf8'), { self, caches, fetch: fetchImpl, URL, Response, Promise });
-  return { handlers, cached, deleted };
+  return { handlers, cached, deleted, notices };
 }
 function event(request) { return { request, respondWith(value) { this.response = value; }, waitUntil(value) { this.wait = value; } }; }
 test('installation caches only the offline fallback; activation clears only old app caches', async () => {
@@ -32,4 +33,11 @@ test('API, asset, cross-origin and non-GET requests are never intercepted', () =
     { method: 'POST', mode: 'navigate', url: 'https://example.test/dashboard' },
     { method: 'GET', mode: 'navigate', url: 'https://other.test/' }
   ]) { const e = event(request); w.handlers.fetch(e); assert.equal(e.response, undefined); }
+});
+
+test('push alerts are generic and never display private payload content', async () => {
+  const w=worker(); const e=event(); e.data={json:()=>({title:'private name',body:'secret details'})}; w.handlers.push(e); await e.wait;
+  assert.equal(w.notices[0].title,'Broker2Broker');
+  assert.equal(w.notices[0].options.body,'You have a new notification. Open the app to view it.');
+  assert.equal(w.notices[0].options.data.url,'/dashboard/notifications');
 });

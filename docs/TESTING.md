@@ -4,8 +4,8 @@
 
 - The connected Supabase project is healthy. Read-only checks show the original three migrations and RLS enabled on all 21 public tables. The live database contains four users, no listings and no payment requests, payments or subscriptions. No live records were changed during this review.
 - The fixed-monthly and renewal-reminder migrations were applied to the connected database. Existing user, listing and payment row counts remained unchanged; real-service end-to-end testing is still outstanding.
-- `npm test` exercises the actual payment SQL against an isolated in-memory PostgreSQL instance, including fixed monthly pricing, pending status, approval, duplicate references, replay, renewal, rejection and reminder deduplication. It also simulates service-worker caching. These are not full browser/API integration tests.
-- The Vercel project has production-scoped backend/session/cron variable names, but no SMTP configuration was listed. Secret values have not been inspected or verified. The GitHub repository is public.
+- `npm test` exercises the actual payment SQL against an isolated in-memory PostgreSQL instance, including fixed monthly pricing, pending status, approval, duplicate references, replay, renewal, rejection and reminder deduplication. It also simulates service-worker caching. Branch tests also exercise the new SQL privacy defaults, enquiry authorization, push queue leases and worker payload handling. These are not full browser/API integration tests.
+- The Vercel project has production-scoped backend/session/cron variable names, but no SMTP configuration was listed. Secret values have not been inspected or verified. The GitHub repository is public; avoid committing private information or credentials.
 
 ## Before inviting real members
 
@@ -67,7 +67,9 @@ Use a private preview deployment and test accounts for the original developer, o
 - [ ] On a secure preview, check the manifest and icon dimensions, then install on supported Android/desktop browsers and from Safari Share → Add to Home Screen on iOS. Check launch, navigation, sign-in and sign-out in standalone mode.
 - [ ] Go offline while installed; navigations must show the offline page, never a cached account, listing, file, or payment response. Reconnect and reload.
 - [ ] Deploy a worker update and confirm it takes control on a subsequent navigation. Check app behavior on mobile and safe-area devices.
-- [ ] Push delivery is **not implemented**: do not claim notification support or request permission until subscription storage, delivery, expiry reminders and end-to-end tests are in place. Existing in-app notifications are separate.
+- [ ] In an isolated project, apply the new public/enquiry and push migrations, configure a test VAPID pair, then verify public previews show only explicitly opted-in, approved, unexpired listings. Existing rows must stay private; images must disappear immediately when listing visibility changes. Confirm free users cannot retrieve member details, contacts or private files, and test owner/suspended/expired/pending cases.
+- [ ] Send enquiries as active, free, expired, suspended and owning users; verify authorization, rate limits, notification, recipient-only and sender-only history, and pagination. Confirm the snapshot includes enquiries.
+- [ ] On a secure preview and actual Android, desktop and iOS Home Screen app, grant and deny push permission, enable/disable, switch accounts on the same browser, trigger a notification, test click-through, revocation, 404/410 cleanup, retry and daily expiry reminder. Verify generic lock-screen text. Push depends on VAPID settings and cron; delivery and device support are not yet verified.
 - [ ] Test the broker directory with free, active, expired and suspended accounts. Verify only active members receive contact fields from the API and suspended brokers are not listed.
 
 Automated local checks: `npm test`, `npm run typecheck`, and `npm run build`. In-memory database tests and worker simulations do not replace real-service and real-device testing.

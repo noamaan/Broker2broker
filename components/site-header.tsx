@@ -6,6 +6,7 @@ import { Menu, X, ArrowUpRight, Building2 } from "lucide-react";
 import { BRAND_NAME } from "@/lib/branding";
 
 const links = [
+  ["Properties", "/properties"],
   ["How it works", "/how-it-works"],
   ["About", "/about"],
   ["Pricing", "/pricing"],
