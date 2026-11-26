@@ -15,8 +15,8 @@ test('manual payment approval, deduplication, fixed term, renewal and reminders'
     create unique index payment_requests_one_open_per_user_uq on public.payment_requests(user_id) where status in ('PENDING VERIFICATION','MORE INFO REQUIRED');`);
   const rpcs = fs.readFileSync('supabase/migrations/20261115095607_supabase_backend_rpcs_and_backups.sql', 'utf8');
   await db.exec(rpcs.slice(rpcs.indexOf('create or replace function public.b2b_payment_decision('), rpcs.indexOf('create or replace function public.b2b_password_reset_complete(')));
-  await db.exec(fs.readFileSync('supabase/migrations/20261126000000_fixed_monthly_membership.sql', 'utf8'));
-  await db.exec(fs.readFileSync('supabase/migrations/20261126000001_membership_reminders.sql', 'utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261126221438_fixed_monthly_membership.sql', 'utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261126221446_membership_reminders.sql', 'utf8'));
   await db.exec(`insert into public.users(user_id,email,password_hash,password_salt,role) values
     ('member1','one@example.test','hash','salt','USER'), ('member2','two@example.test','hash','salt','USER'), ('admin','admin@example.test','hash','salt','ADMIN');
     insert into public.settings(setting_id,key,value) values ('s1','payment.upiId','test@bank'),('s2','payment.payeeName','Test'),('s3','payment.whatsappNumber','919999999999'),('s4','payment.monthlyPrice','999'),('s5','payment.monthlyDurationDays','999');`);
