@@ -1,6 +1,6 @@
 # Deployment and first-run checklist
 
-**Status (2026-11-26):** The connected Supabase project `dfubbzyaoiwbbvkacwic` reports ACTIVE_HEALTHY; the three original migrations are present. The two new migrations in this branch have not been applied. Production data was not changed during the review. An existing Vercel project and production deployment are present. Do not deploy until the private-preview checks pass. Do not send passwords or API keys in chat.
+**Status (2026-11-26):** The connected Supabase project `dfubbzyaoiwbbvkacwic` reports ACTIVE_HEALTHY; the three original migrations are present. The fixed-monthly and reminder migrations were applied and a production deployment was promoted. Existing user, listing and payment row counts remained unchanged. Full end-to-end testing remains outstanding. Do not send passwords or API keys in chat.
 ## 1. Configure Supabase server access
 
 1. Open the Supabase project `Broker2Broker` (`dfubbzyaoiwbbvkacwic`) in the existing organization.
@@ -74,7 +74,7 @@ GitHub Pages is not a backend host and is not suitable for this full app.
 
 - Live registration, authentication, payment submission/approval, duplicate-reference handling, membership expiry and authorization must be tested against an isolated working database. The production database is healthy, but safe isolated end-to-end tests have not been completed.
 - Member submissions and reconfirmations now enter pending approval in this branch; end-to-end testing, including concurrent edits and moderation, is still required before rollout.
-- Listings are currently private to active members; anonymous public property browsing, a dedicated enquiries workflow and web push delivery/subscriptions are not implemented. An in-app renewal reminder migration is staged but has not been applied or tested with the live cron.
-- The fixed ₹199/30-day monthly plan is implemented in this branch and its staged migration; the existing configurable annual plan remains. Apply migrations in a coordinated, tested release; historical payments and memberships must remain unchanged.
+- Listings are currently private to active members; anonymous public property browsing, a dedicated enquiries workflow and web push delivery/subscriptions are not implemented. The in-app renewal reminder migration is applied but has not been tested with the live cron.
+- The fixed ₹199/30-day monthly plan is implemented in the application and database; the existing configurable annual plan remains. Historical payments and memberships were not changed by the migration.
 - Complete real-device install/offline tests and notification tests once implemented. Verify privacy/consent for directory visibility and phone sharing, and the accuracy of the legal pages, before inviting brokers.
 - `npm audit --omit=dev` reported two moderate dependency advisories (exceljs/uuid); review compatible upgrades before rollout.

@@ -19,7 +19,7 @@ Developer credit: **Developed by Noamaan Shaikh**. This attribution is source-co
 
 ## Supabase provisioning status
 
-The connected Supabase project **Broker2Broker** (`dfubbzyaoiwbbvkacwic`, Mumbai) is healthy. The three original migrations are present. The new migrations in this branch have not been applied, and a production release still requires the checks in `docs/TESTING.md`. The existing Vercel project is connected to this repository and has a production deployment. No live data was changed during this review. Google Sheets and Drive are not used by this application; the `gas/` directory is legacy reference only.
+The connected Supabase project **Broker2Broker** (`dfubbzyaoiwbbvkacwic`, Mumbai) is healthy. The original migrations and the fixed-monthly and renewal-reminder migrations have been applied. The existing Vercel project is connected to this repository and has a production deployment. The 2026-11-26 release changed database functions but did not alter existing user, listing or payment rows; full production workflow and real-device testing remains outstanding. Google Sheets and Drive are not used by this application; the `gas/` directory is legacy reference only.
 
 ## Quick start
 
@@ -51,7 +51,7 @@ npm run build
 
 ## Manual payment rules
 
-- Monthly membership is fixed at **₹199 / 30 days** in this branch and its staged database migration. The existing annual plan remains configurable.
+- Monthly membership is fixed at **₹199 / 30 days** in the application and database. The existing annual plan remains configurable.
 - The customer enters the UPI transaction reference and payment date; a screenshot is optional evidence.
 - The request is saved as `PENDING VERIFICATION`.
 - An authorized admin must independently verify the actual UPI credit and then approve. A QR scan, payment intent, WhatsApp message or screenshot does not prove that funds arrived.

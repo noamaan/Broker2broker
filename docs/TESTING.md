@@ -3,7 +3,7 @@
 ## Current review (2026-11-26)
 
 - The connected Supabase project is healthy. Read-only checks show the original three migrations and RLS enabled on all 21 public tables. The live database contains four users, no listings and no payment requests, payments or subscriptions. No live records were changed during this review.
-- The two new migrations in this branch have **not** been applied to the connected database. Test and review them in isolation before a coordinated rollout.
+- The fixed-monthly and renewal-reminder migrations were applied to the connected database. Existing user, listing and payment row counts remained unchanged; real-service end-to-end testing is still outstanding.
 - `npm test` exercises the actual payment SQL against an isolated in-memory PostgreSQL instance, including fixed monthly pricing, pending status, approval, duplicate references, replay, renewal, rejection and reminder deduplication. It also simulates service-worker caching. These are not full browser/API integration tests.
 - The Vercel project has production-scoped backend/session/cron variable names, but no SMTP configuration was listed. Secret values have not been inspected or verified. The GitHub repository is public.
 
