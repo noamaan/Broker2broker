@@ -1,12 +1,11 @@
 # Deployment and first-run checklist
 
-**Status (2026-11-15):** The free Supabase project **Broker2Broker** (`dfubbzyaoiwbbvkacwic`) is active and healthy in `ap-south-1` (Mumbai), in the existing organization. The initial schema, transactional backend/backup RPCs, and atomic JSON snapshot RPC are applied; private asset and backup buckets are present. No application member data has been imported. The Next.js server adapter and business-logic migration are implemented and compile checks pass, but server secrets are not configured in this workspace. No Vercel project/deployment or Git remote exists. The previously provisioned Google spreadsheet and Drive folders remain untouched and are not used by the new backend. **Do not set up or deploy Apps Script.** Do not send passwords or API keys in chat.
-
+**Status (2026-11-26):** The connected Supabase project `dfubbzyaoiwbbvkacwic` reports ACTIVE_HEALTHY; the three original migrations are present. The two new migrations in this branch have not been applied. Production data was not changed during the review. An existing Vercel project and production deployment are present. Do not deploy until the private-preview checks pass. Do not send passwords or API keys in chat.
 ## 1. Configure Supabase server access
 
 1. Open the Supabase project `Broker2Broker` (`dfubbzyaoiwbbvkacwic`) in the existing organization.
 2. In the project API settings, copy a server-side secret/service-role key. The key may be the current `sb_secret_...` style or a legacy service-role key. Keep it private; it bypasses RLS and must only be used by the Next.js server.
-3. The project URL is `https://dfubbzyaoiwbbvkacwic.supabase.co`. The migration history should show `initial_broker2broker`, `supabase_backend_rpcs_and_backups`, and `atomic_json_snapshot`. Do not re-run the SQL manually or create duplicate tables/buckets.
+3. The project URL is `https://dfubbzyaoiwbbvkacwic.supabase.co`. Check migration history for `initial_broker2broker`, `supabase_backend_rpcs_and_backups`, and `atomic_json_snapshot` once the project is available. Do not re-run SQL or create duplicate tables/buckets without verifying the existing state.
 4. Private buckets are `b2b-private-assets` (JPEG/PNG/WebP up to 2.6 MB) and `b2b-private-backups` (JSON snapshots up to 50 MB). Direct browser/table access is not granted; files flow through authenticated Next.js routes.
 
 ## 2. Set application environment variables
@@ -59,14 +58,7 @@ Snapshots contain private database rows (including password hashes and payment r
 
 ## 6. Private GitHub repository and Vercel deployment
 
-No GitHub repository/remote or Vercel project/deployment exists yet. The Vercel credentials were validated previously, but the deployment connector requires project settings for first deployment; do not treat an account connection as an application deployment. The GitHub connector/CLI was not available in the prior setup. From a computer authenticated to your accounts:
-
-1. Create a private GitHub repository and push this project from your own authenticated Git installation. Do not commit `.env.local`, `.env.*` secrets, service keys, bootstrap tokens or SMTP credentials. `.gitignore` excludes local environment files and generated dependencies.
-2. Import the private repository into Vercel as a Next.js app and use the detected build settings (`npm run build`).
-3. Set the required environment variables above for Production and Preview as appropriate. Keep Supabase/SMTP/session/bootstrap/cron/AI values server-only.
-4. Set `APP_BASE_URL` to the HTTPS deployment origin, confirm Cron support and `CRON_SECRET`, then redeploy.
-5. Do not buy a domain or paid service without approval. Verify service-plan limits before launch.
-
+The existing Vercel project `broker2broker` is linked to `noamaan/Broker2broker`, with `main` as its production branch. Preserve the existing production deployment until the full test checklist passes. Use a private preview and isolated test data; confirm the preview has correctly scoped server-only environment variables. Do not commit secrets or expose them to browser code. Verify cron support, UPI settings and SMTP before production rollout.
 GitHub Pages is not a backend host and is not suitable for this full app.
 
 ## 7. Before live launch
@@ -77,3 +69,12 @@ GitHub Pages is not a backend host and is not suitable for this full app.
 - Review Terms, Privacy and Refund Policy with qualified Indian counsel and insert operating-entity/support details.
 - Confirm applicable tax, consumer, privacy and data-retention obligations with advisors.
 - Run the full checklist in [`TESTING.md`](TESTING.md) against a private preview deployment.
+
+## Remaining launch blockers for the requested upgrade
+
+- Live registration, authentication, payment submission/approval, duplicate-reference handling, membership expiry and authorization must be tested against an isolated working database. The production database is healthy, but safe isolated end-to-end tests have not been completed.
+- Member submissions and reconfirmations now enter pending approval in this branch; end-to-end testing, including concurrent edits and moderation, is still required before rollout.
+- Listings are currently private to active members; anonymous public property browsing, a dedicated enquiries workflow and web push delivery/subscriptions are not implemented. An in-app renewal reminder migration is staged but has not been applied or tested with the live cron.
+- The fixed ₹199/30-day monthly plan is implemented in this branch and its staged migration; the existing configurable annual plan remains. Apply migrations in a coordinated, tested release; historical payments and memberships must remain unchanged.
+- Complete real-device install/offline tests and notification tests once implemented. Verify privacy/consent for directory visibility and phone sharing, and the accuracy of the legal pages, before inviting brokers.
+- `npm audit --omit=dev` reported two moderate dependency advisories (exceljs/uuid); review compatible upgrades before rollout.

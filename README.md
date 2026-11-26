@@ -19,9 +19,7 @@ Developer credit: **Developed by Noamaan Shaikh**. This attribution is source-co
 
 ## Supabase provisioning status
 
-The free Supabase project **Broker2Broker** (`dfubbzyaoiwbbvkacwic`) is active in `ap-south-1` (Mumbai), in the existing organization. Its initial schema, transactional backend RPCs, private backup storage and consistent JSON snapshot RPC are applied. They create private tables with RLS, server-only functions for atomic account/payment operations, and private asset/backup buckets. The project starts with no member accounts or listings; only the default settings, categories and localities are seeded.
-
-The Next.js source is not yet connected to production environment secrets, and no Vercel project/deployment or Git remote exists. Google Sheets and Drive resources provisioned earlier remain untouched and are **not used by the application**. No Apps Script project has been set up or deployed; do not deploy the legacy reference under `gas/`.
+The connected Supabase project **Broker2Broker** (`dfubbzyaoiwbbvkacwic`, Mumbai) is healthy. The three original migrations are present. The new migrations in this branch have not been applied, and a production release still requires the checks in `docs/TESTING.md`. The existing Vercel project is connected to this repository and has a production deployment. No live data was changed during this review. Google Sheets and Drive are not used by this application; the `gas/` directory is legacy reference only.
 
 ## Quick start
 
@@ -53,7 +51,7 @@ npm run build
 
 ## Manual payment rules
 
-- Default plans: **₹199 / 30 days** and **₹1,999 / 365 days**. Authorized staff can change them in Admin → Payment settings.
+- Monthly membership is fixed at **₹199 / 30 days** in this branch and its staged database migration. The existing annual plan remains configurable.
 - The customer enters the UPI transaction reference and payment date; a screenshot is optional evidence.
 - The request is saved as `PENDING VERIFICATION`.
 - An authorized admin must independently verify the actual UPI credit and then approve. A QR scan, payment intent, WhatsApp message or screenshot does not prove that funds arrived.
@@ -81,3 +79,11 @@ supabase/migrations/     Applied PostgreSQL schema and RPC migrations
 gas/                     Legacy reference only; not part of runtime and must not be deployed
 docs/                    Deployment and testing guides
 ```
+
+## PWA and rollout status
+
+The app includes a web manifest, icons, install guidance, mobile workspace navigation and a network-first service worker. Only the generic offline page is cached; private listings, account pages and API responses are not made available offline. Android/desktop install prompts depend on browser support; iOS uses Safari's Share → Add to Home Screen. Push notifications are not yet implemented; the existing notification center is in-app only.
+
+The live schema is reachable, but authentication and payment workflows have not yet been verified end-to-end. Do not deploy this branch to production until the project owner checks the project status, verifies existing migrations and data, configures UPI details, and completes the private-preview checklist in `docs/TESTING.md`. Required server configuration remains listed in `.env.example`; SMTP is needed for password reset. No production credentials or payment details are embedded in this repository.
+
+The broker directory lists active registered broker accounts to signed-in users; phone and WhatsApp details are returned only to users with active memberships. Review the platform's privacy notice and obtain any required consent before enabling this for existing users.

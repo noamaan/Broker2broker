@@ -16,7 +16,7 @@ export function SiteFooter() {
       <div>
         <h3 className="text-sm font-bold text-navy-900">Explore</h3>
         <div className="mt-4 grid gap-3 text-sm text-slate-600">
-          <Link className="hover:text-leaf-700" href="/about">About us</Link><Link className="hover:text-leaf-700" href="/how-it-works">How it works</Link><Link className="hover:text-leaf-700" href="/pricing">Membership</Link><Link className="hover:text-leaf-700" href="/contact">Contact</Link>
+          <Link className="hover:text-leaf-700" href="/about">About us</Link><Link className="hover:text-leaf-700" href="/how-it-works">How it works</Link><Link className="hover:text-leaf-700" href="/pricing">Membership</Link><Link className="hover:text-leaf-700" href="/contact">Contact</Link><Link className="hover:text-leaf-700" href="/install">Install the app</Link>
         </div>
       </div>
       <div>

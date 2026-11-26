@@ -1,13 +1,11 @@
 # Testing and acceptance checklist
 
-## Current migration checks
+## Current review (2026-11-26)
 
-- Supabase project `dfubbzyaoiwbbvkacwic` is healthy in Mumbai. Migration history contains `initial_broker2broker` (`20261115094839`), `supabase_backend_rpcs_and_backups` (`20261115095607`), and `atomic_json_snapshot` (`20261115100836`).
-- Verified RLS is enabled on all application tables, including `database_backups`; anon/authenticated roles have no table grants. Both Storage buckets are private with no browser-role object policies, and nine `b2b_*` Postgres functions are present. The snapshot RPC returned the expected 18 business-table keys and its execute ACL is limited to `postgres` and `service_role`.
-- The first migration seeded 15 settings, 31 categories and 14 localities. Users, listings and payment requests are empty; no Google Sheet/Drive data was imported.
-- The active Next.js backend is server-only and no longer references the Apps Script adapter. The `gas/` folder is explicitly marked legacy/do-not-deploy.
-- Latest `npm run typecheck`, `npm run lint` (the same TypeScript check), and `npm run build` passed. Production smoke tests returned `200` for `/`, `/privacy`, and `/pricing`; `401` for unauthenticated `/api/auth/me` and `/api/dashboard`; and `503 BACKEND_NOT_CONFIGURED` for `/api/developer/status` when secrets are absent.
-- No live account/payment/email/file workflow has been exercised through the Next.js app because the Supabase server key, session secret and SMTP configuration are not set. No Vercel project/deployment exists.
+- The connected Supabase project is healthy. Read-only checks show the original three migrations and RLS enabled on all 21 public tables. The live database contains four users, no listings and no payment requests, payments or subscriptions. No live records were changed during this review.
+- The two new migrations in this branch have **not** been applied to the connected database. Test and review them in isolation before a coordinated rollout.
+- `npm test` exercises the actual payment SQL against an isolated in-memory PostgreSQL instance, including fixed monthly pricing, pending status, approval, duplicate references, replay, renewal, rejection and reminder deduplication. It also simulates service-worker caching. These are not full browser/API integration tests.
+- The Vercel project has production-scoped backend/session/cron variable names, but no SMTP configuration was listed. Secret values have not been inspected or verified. The GitHub repository is public.
 
 ## Before inviting real members
 
@@ -26,7 +24,7 @@ Use a private preview deployment and test accounts for the original developer, o
 ### Membership and UPI manual review
 
 - [ ] Register a broker. Confirm the profile is created with free-account status and private listing search is denied.
-- [ ] Configure a test UPI ID/payee/WhatsApp number. Confirm default prices/durations (₹199/30 days and ₹1,999/365 days) or configured values.
+- [ ] Configure a test UPI ID/payee/WhatsApp number. Confirm fixed monthly pricing and duration (₹199/30 days); verify the existing yearly plan separately.
 - [ ] Select monthly. Confirm the amount-specific QR encodes the configured UPI ID, payee and amount; confirm the optional UPI intent opens only as a payment-app handoff. A scan, intent or screenshot must never activate membership.
 - [ ] Enter a test UTR/payment date and optional screenshot. Confirm exactly one `PENDING VERIFICATION` row and a matching user-visible status. Resubmitting the same UTR or creating a second pending request must fail.
 - [ ] Confirm WhatsApp link uses current Admin Settings and prefilled member/payment details. The UI must say WhatsApp is not marked sent and screenshot must be attached manually.
@@ -35,14 +33,14 @@ Use a private preview deployment and test accounts for the original developer, o
 - [ ] Confirm monthly expiry is approval/start time plus 30 days and yearly expiry is plus 365 days.
 - [ ] Renew while active; confirm the new subscription starts at the previous expiry. Reject another request and confirm it grants no access or revenue.
 - [ ] Test Request More Information and rejection notes. Verify pending/rejected payments do not count as collected revenue and expired/unpaid users cannot view private contact data.
-- [ ] Change UPI ID, price, QR image and WhatsApp number. Reload payment page and confirm future payment details use updated values.
+- [ ] Change UPI ID, QR image and WhatsApp number; verify that the monthly price and duration cannot be changed. Reload payment page and confirm future payment details use updated values.
 
 ### Listings, search, AI and member controls
 
 - [ ] With an active member, create a draft listing, edit it, add an image, publish it, unpublish it, mark sold/rented and delete it. Verify the image is in private Supabase Storage and only owner/active members/admin can fetch it.
 - [ ] Confirm duplicate candidates warn before publish and a second explicit action is required to continue.
 - [ ] Search by city/locality, transaction, property type/BHK, sale price, rent, deposit, area, furnishing and availability. Check pagination caps and that free/expired users cannot access contacts.
-- [ ] Verify an active listing older than 15 days moves to Under Review through the authorized daily cron route, is hidden from search, and is restored only after owner reconfirmation. Confirm notification delivery and that a direct PATCH cannot bypass the reconfirm action.
+- [ ] Verify an active listing older than 15 days moves to Under Review through the authorized daily cron route, is hidden from search, and is submitted for administrator approval after owner reconfirmation. Confirm notification delivery and that a direct PATCH cannot bypass the reconfirm action.
 - [ ] Save/unsave a listing, share its link, contact the broker and submit a report. Confirm reports appear only in Admin review.
 - [ ] Test English and Hindi/Hinglish listing conversion. With no AI provider secret, verify the rule-based fallback. If a provider is configured, confirm the key never appears in browser requests or Supabase and extracted data remains editable/unpublished until the user confirms.
 
@@ -63,3 +61,13 @@ Use a private preview deployment and test accounts for the original developer, o
 - [ ] Check registration, member workspace, payment page, listing forms, admin review and developer console on mobile, tablet and desktop.
 - [ ] Confirm all navigation/action buttons call real API routes; no fake payment success or public database/Storage URLs are present.
 - [ ] Review Vercel and Supabase logs for errors. Keep secrets out of Git history and confirm the GitHub repository is private.
+
+### PWA checks (before deployment)
+
+- [ ] On a secure preview, check the manifest and icon dimensions, then install on supported Android/desktop browsers and from Safari Share → Add to Home Screen on iOS. Check launch, navigation, sign-in and sign-out in standalone mode.
+- [ ] Go offline while installed; navigations must show the offline page, never a cached account, listing, file, or payment response. Reconnect and reload.
+- [ ] Deploy a worker update and confirm it takes control on a subsequent navigation. Check app behavior on mobile and safe-area devices.
+- [ ] Push delivery is **not implemented**: do not claim notification support or request permission until subscription storage, delivery, expiry reminders and end-to-end tests are in place. Existing in-app notifications are separate.
+- [ ] Test the broker directory with free, active, expired and suspended accounts. Verify only active members receive contact fields from the API and suspended brokers are not listed.
+
+Automated local checks: `npm test`, `npm run typecheck`, and `npm run build`. In-memory database tests and worker simulations do not replace real-service and real-device testing.

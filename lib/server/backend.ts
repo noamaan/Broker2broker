@@ -74,8 +74,8 @@ function settingValue(map: Record<string, string>, key: string) { return Object.
 function publicSettingsFromMap(map: Record<string, string>) {
   return {
     upiId: settingValue(map, "payment.upiId"), payeeName: settingValue(map, "payment.payeeName"),
-    whatsappNumber: settingValue(map, "payment.whatsappNumber"), monthlyPrice: num(settingValue(map, "payment.monthlyPrice"), 199),
-    yearlyPrice: num(settingValue(map, "payment.yearlyPrice"), 1999), monthlyDurationDays: num(settingValue(map, "payment.monthlyDurationDays"), 30),
+    whatsappNumber: settingValue(map, "payment.whatsappNumber"), monthlyPrice: 199,
+    yearlyPrice: num(settingValue(map, "payment.yearlyPrice"), 1999), monthlyDurationDays: 30,
     yearlyDurationDays: num(settingValue(map, "payment.yearlyDurationDays"), 365), paymentInstructions: settingValue(map, "payment.instructions"),
     customerSupportMessage: settingValue(map, "payment.customerSupportMessage"), supportEmail: settingValue(map, "support.email"),
     supportHours: settingValue(map, "support.hours"), maintenanceMode: settingValue(map, "platform.maintenanceMode") === "true"
@@ -532,7 +532,8 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       const actor = await requireAdmin(str(data.actorID));
       const values = data.settings || {};
       if (str(values.upiId).length > 120 || str(values.payeeName).length > 120 || str(values.paymentInstructions).length > 2000) throw backendError("INVALID_INPUT", "Payment settings are too long.");
-      const numeric = ["monthlyPrice", "yearlyPrice", "monthlyDurationDays", "yearlyDurationDays"];
+      if (Number(values.monthlyPrice) !== 199 || Number(values.monthlyDurationDays) !== 30) throw backendError("INVALID_INPUT", "The monthly plan is fixed at ₹199 for 30 days.");
+      const numeric = ["yearlyPrice", "yearlyDurationDays"];
       for (const key of numeric) if (!Number.isFinite(Number(values[key])) || Number(values[key]) < 1 || Number(values[key]) > 1_000_000) throw backendError("INVALID_INPUT", `Invalid setting: ${key}`);
       const qrID = str(values.upiQrFileId).trim();
       if (qrID) {
@@ -543,8 +544,8 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       if (whatsapp && !/^\+?[0-9][0-9\s().-]{7,19}$/.test(whatsapp)) throw backendError("INVALID_INPUT", "Enter a valid WhatsApp contact number.");
       const updates: Record<string, string | number> = {
         "payment.upiId": str(values.upiId).trim(), "payment.payeeName": str(values.payeeName).trim(), "payment.upiQrFileId": qrID,
-        "payment.whatsappNumber": whatsapp, "payment.monthlyPrice": String(Math.round(Number(values.monthlyPrice))),
-        "payment.yearlyPrice": String(Math.round(Number(values.yearlyPrice))), "payment.monthlyDurationDays": String(Math.round(Number(values.monthlyDurationDays))),
+        "payment.whatsappNumber": whatsapp, "payment.monthlyPrice": "199",
+        "payment.yearlyPrice": String(Math.round(Number(values.yearlyPrice))), "payment.monthlyDurationDays": "30",
         "payment.yearlyDurationDays": String(Math.round(Number(values.yearlyDurationDays))), "payment.instructions": str(values.paymentInstructions).trim(),
         "payment.customerSupportMessage": str(values.customerSupportMessage).trim(), "support.email": str(values.supportEmail).trim(), "support.hours": str(values.supportHours).trim()
       };
@@ -672,6 +673,20 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       if (result.request) return { request: publicPaymentRequest(result.request), ...(result.payment_id ? { paymentID: result.payment_id, subscriptionID: result.subscription_id, startsAt: dateString(result.starts_at), expiresAt: dateString(result.expires_at) } : {}) };
       return result;
     }
+    case "brokers.directory": {
+      const actor = await requireRole(str(data.actorID), ["USER", "ADMIN", "DEVELOPER"]);
+      const canContact = (await membershipStatus(actor)) === "ACTIVE";
+      const page = clampPage(data.page, 1, 100000), limit = 20;
+      const city = str(data.city).trim().slice(0, 80);
+      const fields = "user_id,full_name,agency_name,city" + (canContact ? ",whatsapp_number,mobile" : "");
+      let query = client.from("users").select(fields).eq("account_status", "ACTIVE").eq("role", "USER").order("user_id");
+      if (city) query = query.eq("city", city);
+      const rows = await dbResult<Row[]>(query.range((page - 1) * limit, page * limit));
+      const visible = rows.slice(0, limit);
+      const profiles = visible.length ? await dbResult<Row[]>(client.from("broker_profiles").select("user_id,is_verified,bio").in("user_id", visible.map(row => row.user_id))) : [];
+      const byUser = new Map(profiles.map(profile => [str(profile.user_id), profile]));
+      return { items: visible.map(row => ({ userID: str(row.user_id), fullName: str(row.full_name), agencyName: str(row.agency_name), city: str(row.city), bio: str(byUser.get(str(row.user_id))?.bio), isVerified: byUser.get(str(row.user_id))?.is_verified === true, ...(canContact ? { mobile: str(row.mobile), whatsappNumber: str(row.whatsapp_number) } : {}) })), page, hasMore: rows.length > limit, canContact };
+    }
     case "listings.create": {
       const user = await requireMember(str(data.actorID));
       const listing = listingData(data.listing || {});
@@ -698,13 +713,17 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       const duplicates = patch.status === "ACTIVE" ? duplicateCandidates(allRows, normalized, id) : [];
       if (duplicates.length && !data.confirmDuplicates) return { requiresConfirmation: true, duplicates };
       const now = NOW();
-      const update: Row = { ...normalized, status: askedStatus, updated_at: now };
-      if (askedStatus === "ACTIVE" && str(row.status) !== "ACTIVE") {
+      // A member submission or edit to a published listing must be reviewed again.
+      const changesContent = Object.keys(patch).some(key => !["status", "confirmDuplicates"].includes(key));
+      const finalStatus = !isAdmin && (askedStatus === "ACTIVE" || (row.status === "ACTIVE" && changesContent && !patch.status)) ? "PENDING_APPROVAL" : askedStatus;
+      const update: Row = { ...normalized, status: finalStatus, updated_at: now };
+      if (finalStatus === "ACTIVE" && str(row.status) !== "ACTIVE") {
         update.availability_confirmed_at = now;
         update.reconfirm_due_at = new Date(Date.now() + 15 * 86400000).toISOString();
       }
-      const updated = await updateOne("listings", "listing_id", id, update);
-      await audit(str(actor.user_id), "LISTING_UPDATED", "LISTING", id, { status: askedStatus });
+      const updated = await dbResult<Row | null>(client.from("listings").update(update).eq("listing_id", id).eq("updated_at", row.updated_at).select("*").maybeSingle());
+      if (!updated) throw backendError("CONFLICT", "The listing changed during review. Reload and try again.");
+      await audit(str(actor.user_id), "LISTING_UPDATED", "LISTING", id, { status: finalStatus });
       return { listing: updated ? await publicListing(updated) : null, duplicates };
     }
     case "listings.delete": {
@@ -727,7 +746,7 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       if (!row || row.status === "DELETED") throw backendError("NOT_FOUND", "Listing was not found.");
       const own = str(row.owner_id) === str(actor.user_id), privileged = ["ADMIN", "DEVELOPER"].includes(str(actor.role));
       if (!own && !privileged) await requireMember(str(actor.user_id));
-      if (row.status !== "ACTIVE" && !own && !privileged) throw backendError("NOT_FOUND", "This listing is not currently available.");
+      if (!own && !privileged && (row.status !== "ACTIVE" || !(Date.parse(str(row.reconfirm_due_at)) > Date.now()))) throw backendError("NOT_FOUND", "This listing is not currently available.");
       const listing = await publicListing(row);
       return { ...listing, needsReconfirmation: listing.status === "ACTIVE" && Date.parse(listing.reconfirmDueAt) <= Date.now() };
     }
@@ -768,7 +787,9 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       if (row.status !== "UNDER_REVIEW" && !(row.status === "ACTIVE" && due <= Date.now())) throw backendError("CONFLICT", "This listing is not due for reconfirmation.");
       if (actor.role === "USER") await requireMember(str(actor.user_id));
       const now = NOW();
-      const updated = await updateOne("listings", "listing_id", row.listing_id, { status: "ACTIVE", availability_confirmed_at: now, reconfirm_due_at: new Date(Date.now() + 15 * 86400000).toISOString(), updated_at: now });
+      const status = actor.role === "USER" ? "PENDING_APPROVAL" : "ACTIVE";
+      const updated = await dbResult<Row | null>(client.from("listings").update({ status, availability_confirmed_at: now, reconfirm_due_at: status === "ACTIVE" ? new Date(Date.now() + 15 * 86400000).toISOString() : null, updated_at: now }).eq("listing_id", row.listing_id).eq("updated_at", row.updated_at).select("*").maybeSingle());
+      if (!updated) throw backendError("CONFLICT", "The listing changed during review. Reload and try again.");
       await audit(str(actor.user_id), "LISTING_RECONFIRMED", "LISTING", str(row.listing_id));
       return updated ? publicListing(updated) : null;
     }
@@ -789,7 +810,8 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       if (!["ACTIVE", "DRAFT", "SOLD", "RENTED", "UNAVAILABLE", "UNDER_REVIEW", "DELETED"].includes(status)) throw backendError("INVALID_INPUT", "Invalid listing status.");
       const now = NOW(), patch: Row = { status, updated_at: now };
       if (status === "ACTIVE") { patch.availability_confirmed_at = now; patch.reconfirm_due_at = new Date(Date.now() + 15 * 86400000).toISOString(); }
-      const updated = await updateOne("listings", "listing_id", row.listing_id, patch);
+      const updated = await dbResult<Row | null>(client.from("listings").update(patch).eq("listing_id", row.listing_id).eq("updated_at", row.updated_at).select("*").maybeSingle());
+      if (!updated) throw backendError("CONFLICT", "The listing changed during review. Reload and try again.");
       await audit(str(actor.user_id), "ADMIN_LISTING_STATUS", "LISTING", str(row.listing_id), { status });
       await notify(str(row.owner_id), "LISTING_REVIEW", "Listing reviewed", `An administrator updated the status of your listing ${str(row.title)}.`, str(row.listing_id));
       return updated ? publicListing(updated) : null;
@@ -1003,8 +1025,9 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
     }
     case "system.daily": {
       const count = await dbResult<number>(client.rpc("b2b_reconfirm_due_listings"));
+      const reminders = await dbResult<number>(client.rpc("b2b_membership_reminders"));
       const backup = await createBackup("SYSTEM");
-      return { reconfirmed: num(count), backup };
+      return { reconfirmed: num(count), membershipReminders: num(reminders), backup };
     }
     case "files.upload": return uploadFile(str(data.actorID), data);
     case "files.get": return getFile(str(data.actorID), str(data.fileID));
