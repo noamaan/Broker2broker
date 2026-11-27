@@ -100,10 +100,22 @@ async function updateSettings(actorID: string, updates: Record<string, string | 
   if (rows.length) await dbResult(supabaseAdmin().from("settings").upsert(rows, { onConflict: "key" }));
 }
 
+function hasActiveMembership(user: Row | null) {
+  if (!user || str(user.account_status) !== "ACTIVE" || str(user.membership_status) !== "ACTIVE") return false;
+  const expiry = Date.parse(str(user.membership_expires_at));
+  return Number.isFinite(expiry) && expiry > Date.now();
+}
+async function ownerHasActiveMembership(ownerID: string) {
+  return hasActiveMembership(await getUserRow(ownerID));
+}
+// Free directory previews must not disclose the unrestricted biography or obvious contact details.
+function directoryPreviewField(value: unknown) {
+  return str(value).replace(/[^\s@]+@[^\s@]+/g, "").replace(/(?:https?:\/\/|www\.)\S+/gi, "").replace(/@\S+/g, "").replace(/[^\p{L}\p{M}\s.'-]/gu, "").replace(/\s+/g, " ").trim();
+}
 function membershipStatusFromRows(user: Row, requests: Row[]) {
   if (str(user.account_status) === "SUSPENDED") return "SUSPENDED";
   const expiry = Date.parse(str(user.membership_expires_at));
-  if (str(user.membership_status) === "ACTIVE" && Number.isFinite(expiry) && expiry > Date.now()) return "ACTIVE";
+  if (hasActiveMembership(user)) return "ACTIVE";
   if (requests.some((request) => ["PENDING VERIFICATION", "MORE INFO REQUIRED"].includes(str(request.status)))) return "PAYMENT PENDING";
   if (requests.length && str(requests[0].status) === "REJECTED") return "PAYMENT REJECTED";
   if (Number.isFinite(expiry) && expiry > 0 && expiry <= Date.now()) return "EXPIRED";
@@ -121,8 +133,7 @@ function groupRequestsByUser(requests: Row[]) {
 }
 async function membershipStatus(user: Row) {
   if (str(user.account_status) === "SUSPENDED") return "SUSPENDED";
-  const expiry = Date.parse(str(user.membership_expires_at));
-  if (str(user.membership_status) === "ACTIVE" && Number.isFinite(expiry) && expiry > Date.now()) return "ACTIVE";
+  if (hasActiveMembership(user)) return "ACTIVE";
   const requests = await dbResult<Row[]>(supabaseAdmin().from("payment_requests").select("status,request_date").eq("user_id", user.user_id).order("request_date", { ascending: false }));
   return membershipStatusFromRows(user, requests);
 }
@@ -152,7 +163,7 @@ async function requireDeveloper(userID: string) {
 }
 async function requireMember(userID: string) {
   const user = await requireRole(userID, ["USER", "ADMIN", "DEVELOPER"]);
-  if ((await membershipStatus(user)) !== "ACTIVE") throw backendError("MEMBERSHIP_REQUIRED", "An active approved membership is required.");
+  if (!hasActiveMembership(user)) throw backendError("MEMBERSHIP_REQUIRED", "An active approved membership is required.");
   return user;
 }
 function mapPublicUser(row: Row, status: string, profile: Row | null, maintenanceMode: boolean): CurrentUser {
@@ -398,7 +409,7 @@ async function getFile(actorID: string, fileID: string) {
   if (!allowed && file.purpose === "LISTING_IMAGE") {
     const listing = await one("listings", "listing_id", str(file.related_id));
     const status = await membershipStatus(actor);
-    if (listing && listing.status === "ACTIVE" && Date.parse(str(listing.reconfirm_due_at)) > Date.now() && status === "ACTIVE") {
+    if (listing && listing.status === "ACTIVE" && Date.parse(str(listing.reconfirm_due_at)) > Date.now() && status === "ACTIVE" && await ownerHasActiveMembership(str(listing.owner_id))) {
       allowed = arr(listing.images).map(String).includes(fileID);
     }
   }
@@ -425,7 +436,7 @@ async function publicFile(listingID: string, fileID: string) {
   const listing = await one("listings", "listing_id", listingID);
   if (!listing || listing.is_public !== true || listing.status !== "ACTIVE" || !(Date.parse(str(listing.reconfirm_due_at)) > Date.now()) || !arr(listing.images).includes(fileID)) throw backendError("NOT_FOUND", "Image was not found.");
   const owner = await getUserRow(str(listing.owner_id));
-  if (!owner || owner.account_status !== "ACTIVE") throw backendError("NOT_FOUND", "Image was not found.");
+  if (!hasActiveMembership(owner)) throw backendError("NOT_FOUND", "Image was not found.");
   const file = await one("file_assets", "file_id", fileID);
   if (!file || file.active !== true || file.purpose !== "LISTING_IMAGE" || str(file.related_id) !== listingID || str(file.owner_id) !== str(listing.owner_id)) throw backendError("NOT_FOUND", "Image was not found.");
   const download = await supabaseAdmin().storage.from(str(file.bucket, APP_BUCKET)).download(str(file.storage_path));
@@ -631,7 +642,7 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
         membership: { status, plan: str(user.current_plan, "FREE"), startAt: dateString(user.membership_start_at), expiresAt: dateString(user.membership_expires_at), daysRemaining: status === "ACTIVE" ? Math.max(0, Math.ceil((expiry - Date.now()) / 86400000)) : 0 },
         counts: {
           myListings: listings.length,
-          activeListings: listings.filter((listing) => listing.status === "ACTIVE" && Date.parse(str(listing.reconfirm_due_at)) > Date.now()).length,
+          activeListings: hasActiveMembership(user) ? listings.filter((listing) => listing.status === "ACTIVE" && Date.parse(str(listing.reconfirm_due_at)) > Date.now()).length : 0,
           savedProperties: favourites.length, unreadNotifications: notifications.length
         },
         latestPaymentRequest: requests[0] ? publicPaymentRequest(requests[0]) : null
@@ -703,7 +714,7 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       const bhk = str(data.bhk).trim().slice(0, 20);
       const transaction = str(data.transactionType).trim();
       if ((q && !/^[\p{L}\p{N} .'-]+$/u.test(q)) || (city && !/^[\p{L}\p{N} .'-]+$/u.test(city)) || (bhk && !/^[a-zA-Z0-9 ]+$/.test(bhk))) throw backendError("INVALID_INPUT", "Enter a valid search term.");
-      let query = client.from("listings").select("listing_id,property_type,bhk,city,locality,transaction_type,price,rent,images,created_at,users!inner(account_status)").eq("is_public", true).eq("status", "ACTIVE").gt("reconfirm_due_at", NOW()).eq("users.account_status", "ACTIVE").order("created_at", { ascending: false });
+      let query = client.from("listings").select("listing_id,property_type,bhk,city,locality,transaction_type,price,rent,images,created_at,users!inner(account_status,membership_status,membership_expires_at)").eq("is_public", true).eq("status", "ACTIVE").gt("reconfirm_due_at", NOW()).eq("users.account_status", "ACTIVE").eq("users.membership_status", "ACTIVE").gt("users.membership_expires_at", NOW()).order("created_at", { ascending: false });
       if (q) query = query.ilike("locality", `%${q}%`);
       if (city) query = query.ilike("city", `%${city}%`);
       if (bhk) query = query.ilike("bhk", `%${bhk}%`);
@@ -755,7 +766,7 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       const visible = rows.slice(0, limit);
       const profiles = visible.length ? await dbResult<Row[]>(client.from("broker_profiles").select("user_id,is_verified,bio").in("user_id", visible.map(row => row.user_id))) : [];
       const byUser = new Map(profiles.map(profile => [str(profile.user_id), profile]));
-      return { items: visible.map(row => ({ userID: str(row.user_id), fullName: str(row.full_name), agencyName: str(row.agency_name), city: str(row.city), bio: str(byUser.get(str(row.user_id))?.bio), isVerified: byUser.get(str(row.user_id))?.is_verified === true, ...(canContact ? { mobile: str(row.mobile), whatsappNumber: str(row.whatsapp_number) } : {}) })), page, hasMore: rows.length > limit, canContact };
+      return { items: visible.map(row => ({ userID: str(row.user_id), fullName: canContact ? str(row.full_name) : directoryPreviewField(row.full_name), agencyName: canContact ? str(row.agency_name) : directoryPreviewField(row.agency_name), city: canContact ? str(row.city) : directoryPreviewField(row.city), bio: canContact ? str(byUser.get(str(row.user_id))?.bio) : "", isVerified: byUser.get(str(row.user_id))?.is_verified === true, ...(canContact ? { mobile: str(row.mobile), whatsappNumber: str(row.whatsapp_number) } : {}) })), page, hasMore: rows.length > limit, canContact };
     }
     case "listings.create": {
       const user = await requireMember(str(data.actorID));
@@ -769,7 +780,8 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       const actor = await requireRole(str(data.actorID), ["USER", "ADMIN", "DEVELOPER"]);
       const id = str(data.listingID), patch = data.patch || {};
       const isAdmin = ["ADMIN", "DEVELOPER"].includes(str(actor.role));
-      if (patch.status === "ACTIVE" && !isAdmin) await requireMember(str(actor.user_id));
+      const changesContent = Object.keys(patch).some(key => !["status", "confirmDuplicates"].includes(key));
+      if (!isAdmin && (patch.status === "ACTIVE" || changesContent)) await requireMember(str(actor.user_id));
       const row = await one("listings", "listing_id", id);
       if (!row || row.status === "DELETED") throw backendError("NOT_FOUND", "Listing was not found.");
       if (str(row.owner_id) !== str(actor.user_id) && !isAdmin) throw backendError("FORBIDDEN", "You can only edit your own listing.");
@@ -784,9 +796,9 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       if (duplicates.length && !data.confirmDuplicates) return { requiresConfirmation: true, duplicates };
       const now = NOW();
       // A member submission or edit to a published listing must be reviewed again.
-      const changesContent = Object.keys(patch).some(key => !["status", "confirmDuplicates"].includes(key));
       const finalStatus = !isAdmin && (askedStatus === "ACTIVE" || (row.status === "ACTIVE" && changesContent && !patch.status)) ? "PENDING_APPROVAL" : askedStatus;
       const update: Row = { ...normalized, status: finalStatus, updated_at: now };
+      if (finalStatus === "ACTIVE" && !(await ownerHasActiveMembership(str(row.owner_id)))) throw backendError("MEMBERSHIP_REQUIRED", "The listing owner needs an active membership before this listing can be published.");
       if (finalStatus === "ACTIVE" && str(row.status) !== "ACTIVE") {
         update.availability_confirmed_at = now;
         update.reconfirm_due_at = new Date(Date.now() + 15 * 86400000).toISOString();
@@ -816,7 +828,7 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       if (!row || row.status === "DELETED") throw backendError("NOT_FOUND", "Listing was not found.");
       const own = str(row.owner_id) === str(actor.user_id), privileged = ["ADMIN", "DEVELOPER"].includes(str(actor.role));
       if (!own && !privileged) await requireMember(str(actor.user_id));
-      if (!own && !privileged && (row.status !== "ACTIVE" || !(Date.parse(str(row.reconfirm_due_at)) > Date.now()))) throw backendError("NOT_FOUND", "This listing is not currently available.");
+      if (!own && !privileged && (row.status !== "ACTIVE" || !(Date.parse(str(row.reconfirm_due_at)) > Date.now()) || !(await ownerHasActiveMembership(str(row.owner_id))))) throw backendError("NOT_FOUND", "This listing is not currently available.");
       const listing = await publicListing(row);
       return { ...listing, needsReconfirmation: listing.status === "ACTIVE" && Date.parse(listing.reconfirmDueAt) <= Date.now() };
     }
@@ -826,10 +838,11 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       if (!privileged) await requireMember(str(actor.user_id));
       const filters = data.filters || {}, page = clampPage(data.page, 1, 1_000_000), limit = clampPage(data.limit, 20, 50), q = str(filters.q).toLowerCase();
       const rows = await selectAll("listings");
+      const activeOwners = privileged ? null : new Set((await selectAll("users", "user_id,account_status,membership_status,membership_expires_at")).filter(hasActiveMembership).map(owner => str(owner.user_id)));
       const filtered = rows.filter((row) => {
         const due = Date.parse(str(row.reconfirm_due_at));
         if (row.status === "DELETED") return false;
-        if (!privileged && (row.status !== "ACTIVE" || !(due > Date.now()))) return false;
+        if (!privileged && (row.status !== "ACTIVE" || !(due > Date.now()) || !activeOwners?.has(str(row.owner_id)))) return false;
         const matches = (key: string, column: string) => !filters[key] || str(row[column]).toLowerCase() === str(filters[key]).toLowerCase();
         if (!matches("city", "city") || !matches("locality", "locality") || !matches("transactionType", "transaction_type") || !matches("propertyType", "property_type") || !matches("bhk", "bhk") || !matches("furnishing", "furnishing")) return false;
         if (filters.availability && !str(row.availability).toLowerCase().includes(str(filters.availability).toLowerCase())) return false;
@@ -858,6 +871,7 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       if (actor.role === "USER") await requireMember(str(actor.user_id));
       const now = NOW();
       const status = actor.role === "USER" ? "PENDING_APPROVAL" : "ACTIVE";
+      if (status === "ACTIVE" && !(await ownerHasActiveMembership(str(row.owner_id)))) throw backendError("MEMBERSHIP_REQUIRED", "The listing owner needs an active membership before this listing can be published.");
       const updated = await dbResult<Row | null>(client.from("listings").update({ status, availability_confirmed_at: now, reconfirm_due_at: status === "ACTIVE" ? new Date(Date.now() + 15 * 86400000).toISOString() : null, updated_at: now }).eq("listing_id", row.listing_id).eq("updated_at", row.updated_at).select("*").maybeSingle());
       if (!updated) throw backendError("CONFLICT", "The listing changed during review. Reload and try again.");
       await audit(str(actor.user_id), "LISTING_RECONFIRMED", "LISTING", str(row.listing_id));
@@ -879,6 +893,7 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       const status = str(data.status);
       if (!["ACTIVE", "DRAFT", "SOLD", "RENTED", "UNAVAILABLE", "UNDER_REVIEW", "DELETED"].includes(status)) throw backendError("INVALID_INPUT", "Invalid listing status.");
       const now = NOW(), patch: Row = { status, updated_at: now };
+      if (status === "ACTIVE" && !(await ownerHasActiveMembership(str(row.owner_id)))) throw backendError("MEMBERSHIP_REQUIRED", "The listing owner needs an active membership before this listing can be published.");
       if (status === "ACTIVE") { patch.availability_confirmed_at = now; patch.reconfirm_due_at = new Date(Date.now() + 15 * 86400000).toISOString(); }
       const updated = await dbResult<Row | null>(client.from("listings").update(patch).eq("listing_id", row.listing_id).eq("updated_at", row.updated_at).select("*").maybeSingle());
       if (!updated) throw backendError("CONFLICT", "The listing changed during review. Reload and try again.");
@@ -934,13 +949,14 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       const ids = favourites.map((row) => str(row.listing_id));
       if (!ids.length) return [];
       const listings = await dbResult<Row[]>(client.from("listings").select("*").in("listing_id", ids).eq("status", "ACTIVE"));
-      const visible = listings.filter((row) => Date.parse(str(row.reconfirm_due_at)) > Date.now());
+      const activeOwners = new Set((await selectAll("users", "user_id,account_status,membership_status,membership_expires_at")).filter(hasActiveMembership).map(owner => str(owner.user_id)));
+      const visible = listings.filter((row) => Date.parse(str(row.reconfirm_due_at)) > Date.now() && activeOwners.has(str(row.owner_id)));
       return publicListings(visible);
     }
     case "favourites.add": {
       const user = await requireMember(str(data.actorID));
       const listing = await one("listings", "listing_id", str(data.listingID));
-      if (!listing || listing.status !== "ACTIVE" || !(Date.parse(str(listing.reconfirm_due_at)) > Date.now())) throw backendError("NOT_FOUND", "This listing is not currently available.");
+      if (!listing || listing.status !== "ACTIVE" || !(Date.parse(str(listing.reconfirm_due_at)) > Date.now()) || !(await ownerHasActiveMembership(str(listing.owner_id)))) throw backendError("NOT_FOUND", "This listing is not currently available.");
       await dbResult(supabaseAdmin().from("favourites").upsert({ favourite_id: newID("FAV"), user_id: user.user_id, listing_id: listing.listing_id, created_at: NOW() }, { onConflict: "user_id,listing_id", ignoreDuplicates: true }));
       return { saved: true };
     }

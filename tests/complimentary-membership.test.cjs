@@ -17,6 +17,7 @@ test('developer-only complimentary grants preserve payment records, renewals and
   await db.exec(fs.readFileSync('supabase/migrations/20261126230000_public_listings_enquiries.sql','utf8'));
   await db.exec(fs.readFileSync('supabase/migrations/20261126230100_web_push.sql','utf8'));
   await db.exec(fs.readFileSync('supabase/migrations/20261127001000_complimentary_membership.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261127002000_enquiry_owner_entitlement.sql','utf8'));
   await db.exec(`insert into public.users(user_id,email,password_hash,password_salt,role,account_status) values
     ('owner','owner@example.test','hash','salt','DEVELOPER','ACTIVE'),('fake','fake@example.test','hash','salt','DEVELOPER','ACTIVE'),
     ('admin','admin@example.test','hash','salt','ADMIN','ACTIVE'),('member','member@example.test','hash','salt','USER','ACTIVE'),

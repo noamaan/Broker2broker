@@ -7,6 +7,12 @@
 - `npm test` exercises the actual payment SQL against an isolated in-memory PostgreSQL instance, including fixed monthly pricing, pending status, approval, duplicate references, replay, renewal, rejection and reminder deduplication. It also simulates service-worker caching. Branch tests also exercise the new SQL privacy defaults, enquiry authorization, push queue leases and worker payload handling. These are not full browser/API integration tests.
 - The Vercel project has production-scoped backend/session/cron variable names, but no SMTP configuration was listed. Secret values have not been inspected or verified. The GitHub repository is public; avoid committing private information or credentials.
 
+### Membership access controls
+
+- Automated backend-adapter tests cover free, pending, rejected, expired, suspended and active users, including direct API actions, owner expiry, free directory contact redaction and the ability to withdraw one's own listing. SQL tests check that an enquiry cannot be sent to an expired listing owner. These are isolated/mocked checks, not live Supabase end-to-end tests.
+- [ ] Verify all protected endpoints with signed-in free, pending, rejected, expired, suspended and active test accounts in an isolated Supabase-backed preview. Confirm an expired or suspended listing owner’s details and images are hidden from other users, pending payment does not unlock access, renewal restores only eligible listings, and withdrawal/deletion remains available to the owner.
+- [ ] Check profile fields for possible contact-detail leakage in the free broker directory; automated redaction cannot detect every way a person may encode contact information.
+
 ### Complimentary membership review
 
 - Automated isolated PostgreSQL tests cover developer authorization, suspended users, fixed monthly term, idempotent retries, pending requests, audit/notification, no fabricated payment and renewal with verified UPI. Component rendering tests check that administrators do not see the grant button and both roles can open member-specific payments.
