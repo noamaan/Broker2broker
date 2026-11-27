@@ -1,0 +1,59 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const {PGlite}=require('@electric-sql/pglite');
+
+test('developer-only complimentary grants preserve payment records, renewals and idempotency',async t=>{
+  const db=await PGlite.create();t.after(()=>db.close());
+  const initial=fs.readFileSync('supabase/migrations/20261115094839_initial_broker2broker.sql','utf8');
+  await db.exec(initial.slice(0,initial.indexOf('alter table public.users enable row level security;')).replace('create extension if not exists pgcrypto;',''));
+  await db.exec(`create role anon; create role authenticated; create role service_role;
+    drop index public.payment_requests_utr_uq;
+    create unique index payment_requests_utr_uq on public.payment_requests (upper(regexp_replace(upi_transaction_id, '[[:space:]]+', '', 'g')));
+    create unique index payment_requests_one_open_per_user_uq on public.payment_requests(user_id) where status in ('PENDING VERIFICATION','MORE INFO REQUIRED');`);
+  const rpc=fs.readFileSync('supabase/migrations/20261115095607_supabase_backend_rpcs_and_backups.sql','utf8');
+  await db.exec(rpc.slice(rpc.indexOf('create or replace function public.b2b_payment_decision('),rpc.indexOf('create or replace function public.b2b_password_reset_complete(')));
+  await db.exec(fs.readFileSync('supabase/migrations/20261126221438_fixed_monthly_membership.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261126230000_public_listings_enquiries.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261126230100_web_push.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261127001000_complimentary_membership.sql','utf8'));
+  await db.exec(`insert into public.users(user_id,email,password_hash,password_salt,role,account_status) values
+    ('owner','owner@example.test','hash','salt','DEVELOPER','ACTIVE'),('fake','fake@example.test','hash','salt','DEVELOPER','ACTIVE'),
+    ('admin','admin@example.test','hash','salt','ADMIN','ACTIVE'),('member','member@example.test','hash','salt','USER','ACTIVE'),
+    ('other','other@example.test','hash','salt','USER','ACTIVE'),('suspended','suspended@example.test','hash','salt','USER','SUSPENDED');
+    insert into public.platform_config(key,value) values ('developer_user_id','owner') on conflict(key) do update set value=excluded.value;
+    insert into public.developers(developer_id,user_id,email,status) values ('dev','owner','owner@example.test','ACTIVE');
+    insert into public.push_subscriptions(subscription_id,user_id,endpoint,p256dh,auth_key) values('sub','member','https://fcm.googleapis.com/test','key','auth');
+    insert into public.settings(setting_id,key,value) values ('s1','payment.upiId','test@bank'),('s2','payment.payeeName','Test'),('s3','payment.whatsappNumber','919999999999'),('s4','payment.yearlyDurationDays','365');`);
+  const grant=(actor,user,plan,reason,id)=>db.query('select b2b_grant_complimentary_membership($1,$2,$3,$4,$5) as result',[actor,user,plan,reason,id]);
+  const key='24da7588-6233-4d9e-90de-edb3e644f850', next='24da7588-6233-4d9e-90de-edb3e644f851', third='24da7588-6233-4d9e-90de-edb3e644f852';
+  await assert.rejects(grant('admin','member','MONTHLY','Courtesy grant',key),/FORBIDDEN/);
+  await assert.rejects(grant('fake','member','MONTHLY','Courtesy grant',key),/FORBIDDEN/);
+  await assert.rejects(grant('owner','suspended','MONTHLY','Courtesy grant',key),/FORBIDDEN/);
+  await assert.rejects(grant('owner','owner','MONTHLY','Courtesy grant',key),/FORBIDDEN/);
+  await assert.rejects(grant('owner','member','LIFETIME','Courtesy grant',key),/INVALID_INPUT/);
+  await assert.rejects(grant('owner','member','MONTHLY','no',key),/INVALID_INPUT/);
+  await db.query("select b2b_create_payment_request('member','req1','TESTUTR1',current_date,'MONTHLY',199,'')");
+  const first=(await grant('owner','member','MONTHLY','Courtesy grant',key)).rows[0].result;
+  assert.equal(first.replayed,false);
+  const sub=(await db.query("select *,extract(epoch from(expires_at-starts_at)) as seconds from subscriptions where subscription_id=$1",[first.subscription_id])).rows[0];
+  assert.equal(sub.source,'COMPLIMENTARY');assert.equal(Number(sub.amount),0);assert.equal(sub.payment_id,null);assert.equal(sub.payment_request_id,null);assert.equal(Number(sub.seconds),30*86400);
+  assert.equal((await grant('owner','member','MONTHLY','Courtesy grant',key)).rows[0].result.replayed,true);
+  await assert.rejects(grant('owner','member','YEARLY','Courtesy grant',key),/CONFLICT/);
+  assert.equal(Number((await db.query('select count(*) n from subscriptions')).rows[0].n),1);
+  assert.equal(Number((await db.query('select count(*) n from payments')).rows[0].n),0);
+  assert.equal((await db.query("select status from payment_requests where request_id='req1'")).rows[0].status,'PENDING VERIFICATION');
+  assert.equal(Number((await db.query("select count(*) n from audit_logs where action='COMPLIMENTARY_MEMBERSHIP_GRANTED'")).rows[0].n),1);
+  assert.equal(Number((await db.query("select count(*) n from notifications where type='MEMBERSHIP_GRANTED'")).rows[0].n),1);
+  assert.equal(Number((await db.query("select count(*) n from push_queue q join notifications n on n.notification_id=q.notification_id where n.type='MEMBERSHIP_GRANTED'")).rows[0].n),1);
+  await db.query("select b2b_payment_decision('admin','req1','APPROVE','',true,'payment1','paid1')");
+  const paid=(await db.query("select * from subscriptions where subscription_id='paid1'")).rows[0];
+  assert.equal(paid.source,'PAYMENT');assert.equal(Number(paid.amount),199);assert.equal(new Date(paid.starts_at).toISOString(),new Date(first.expires_at).toISOString());
+  const renewal=(await grant('owner','member','YEARLY','Second courtesy',next)).rows[0].result;
+  assert.equal(new Date(renewal.starts_at).toISOString(),new Date(paid.expires_at).toISOString());
+  const second=(await db.query("select extract(epoch from(expires_at-starts_at)) seconds from subscriptions where subscription_id=$1",[renewal.subscription_id])).rows[0];assert.equal(Number(second.seconds),365*86400);
+  await assert.rejects(db.exec("insert into subscriptions(subscription_id,user_id,plan,amount,duration_days,status,starts_at,expires_at,approved_by,renewal_type,source,grant_reason) values('forged','member','MONTHLY',199,30,'ACTIVE',now(),now(),'owner','NEW','PAYMENT','oops')"),/check constraint/);
+  await db.exec("update developers set status='REVOKED' where user_id='owner'");await assert.rejects(grant('owner','other','MONTHLY','Courtesy grant',third),/FORBIDDEN/);
+  assert.equal((await db.query("select has_function_privilege('anon','public.b2b_grant_complimentary_membership(text,text,text,text,uuid)','execute') allowed")).rows[0].allowed,false);
+  assert.equal((await db.query("select has_function_privilege('authenticated','public.b2b_grant_complimentary_membership(text,text,text,text,uuid)','execute') allowed")).rows[0].allowed,false);
+});

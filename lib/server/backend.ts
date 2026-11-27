@@ -46,7 +46,7 @@ async function securityLog(actorID: string, eventType: string, subject: string, 
 const RATE_LIMITS: Record<string, [number, number]> = {
   "auth.getByEmail": [12, 600], "auth.register": [6, 3600], "auth.reset.request": [4, 3600],
   "auth.reset.complete": [6, 3600], "auth.changePassword": [6, 3600], "ai.context": [12, 60],
-  "payment.createRequest": [6, 3600], "push.rate": [20, 3600], "enquiries.create": [15, 3600], "listings.public": [120, 60], "files.public": [240, 60], "listings.search": [60, 60], "files.upload": [12, 3600]
+  "payment.createRequest": [6, 3600], "developer.grantMembership": [30, 3600], "push.rate": [20, 3600], "enquiries.create": [15, 3600], "listings.public": [120, 60], "files.public": [240, 60], "listings.search": [60, 60], "files.upload": [12, 3600]
 };
 async function rateLimit(action: string, data: Data) {
   const subject = str(data.actorID || data.rateKey || data.email || data.token || data.userID || data.fileID || "server").toLowerCase().slice(0, 120);
@@ -640,7 +640,7 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
     case "user.mySubscriptions": {
       const user = await requireRole(str(data.actorID), ["USER", "ADMIN", "DEVELOPER"]);
       const rows = await dbResult<Row[]>(client.from("subscriptions").select("*").eq("user_id", user.user_id).order("created_at", { ascending: false }));
-      return rows.map((row) => ({ subscriptionID: str(row.subscription_id), plan: str(row.plan), amount: num(row.amount), durationDays: num(row.duration_days), status: str(row.status), startsAt: dateString(row.starts_at), expiresAt: dateString(row.expires_at), paymentID: str(row.payment_id) }));
+      return rows.map((row) => ({ subscriptionID: str(row.subscription_id), plan: str(row.plan), amount: num(row.amount), durationDays: num(row.duration_days), status: str(row.status), startsAt: dateString(row.starts_at), expiresAt: dateString(row.expires_at), paymentID: str(row.payment_id), source: str(row.source, "PAYMENT") }));
     }
     case "user.notifications": {
       const user = await requireRole(str(data.actorID), ["USER", "ADMIN", "DEVELOPER"]);
@@ -678,6 +678,7 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       let rows = await selectAll("payment_requests");
       const status = str(data.status);
       if (status) rows = rows.filter((row) => str(row.status) === status);
+      if (data.userID) rows = rows.filter((row) => str(row.user_id) === str(data.userID));
       rows.sort((a, b) => str(b.request_date).localeCompare(str(a.request_date)));
       const page = clampPage(data.page, 1, 1_000_000), limit = clampPage(data.limit, 30, 100);
       return { items: rows.slice((page - 1) * limit, page * limit).map(publicPaymentRequest), total: rows.length, page, limit };
@@ -1003,7 +1004,7 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       return {
         items: items.map((user) => {
           const status = membershipStatusFromRows(user, requestsByUser.get(str(user.user_id)) || []);
-          return { ...mapPublicUser(user, status, profileByUser.get(str(user.user_id)) || null, maintenanceMode), listingCount: listingCounts.get(str(user.user_id)) || 0 };
+          return { ...mapPublicUser(user, status, profileByUser.get(str(user.user_id)) || null, maintenanceMode), listingCount: listingCounts.get(str(user.user_id)) || 0, pendingPayments: (requestsByUser.get(str(user.user_id)) || []).filter(request => ["PENDING VERIFICATION", "MORE INFO REQUIRED"].includes(str(request.status))).length };
         }),
         total: filtered.length, page, limit
       };
@@ -1039,6 +1040,10 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       }
       await audit(str(actor.user_id), "ANNOUNCEMENT_SENT", "NOTIFICATION", title, { audience, recipientCount: recipients.length });
       return { sent: true, recipientCount: recipients.length };
+    }
+    case "developer.grantMembership": {
+      const actor = await requireDeveloper(str(data.actorID));
+      return dbResult<Row>(client.rpc("b2b_grant_complimentary_membership", { p_actor_id:str(actor.user_id), p_user_id:str(data.userID), p_plan:str(data.plan), p_reason:str(data.reason).trim(), p_grant_id:str(data.grantID) }));
     }
     case "developer.userRole": {
       const actor = await requireDeveloper(str(data.actorID));

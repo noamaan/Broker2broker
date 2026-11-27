@@ -2,10 +2,16 @@
 
 ## Current review (2026-11-26)
 
-- The connected Supabase project is healthy. Read-only checks show the original three migrations and RLS enabled on all 21 public tables. The live database contains four users, no listings and no payment requests, payments or subscriptions. No live records were changed during this review.
+- The connected Supabase project is healthy. Read-only checks show the original three migrations and RLS enabled on all 21 public tables. At the earlier review the live database contained four users and no listings or payment records; a later read-only check showed four users, no listings, two payment requests, one payment and one subscription. These are live records, not test fixtures; no live user or payment rows were changed during this review.
 - The fixed-monthly and renewal-reminder migrations were applied to the connected database. Existing user, listing and payment row counts remained unchanged; real-service end-to-end testing is still outstanding.
 - `npm test` exercises the actual payment SQL against an isolated in-memory PostgreSQL instance, including fixed monthly pricing, pending status, approval, duplicate references, replay, renewal, rejection and reminder deduplication. It also simulates service-worker caching. Branch tests also exercise the new SQL privacy defaults, enquiry authorization, push queue leases and worker payload handling. These are not full browser/API integration tests.
 - The Vercel project has production-scoped backend/session/cron variable names, but no SMTP configuration was listed. Secret values have not been inspected or verified. The GitHub repository is public; avoid committing private information or credentials.
+
+### Complimentary membership review
+
+- Automated isolated PostgreSQL tests cover developer authorization, suspended users, fixed monthly term, idempotent retries, pending requests, audit/notification, no fabricated payment and renewal with verified UPI. Component rendering tests check that administrators do not see the grant button and both roles can open member-specific payments.
+- [ ] On an isolated Supabase-backed preview, authenticate as developer, admin, member and suspended member. Verify the full UI/API grant flow, server-side denials, retries after interrupted responses, reason audit, member-visible access, UPI request review and role isolation. Verify mobile layout and payment approval separately.
+- [ ] Apply migrations and publish only after the above and the existing membership/PWA checklist pass. Never use real users or payment evidence for testing.
 
 ## Before inviting real members
 

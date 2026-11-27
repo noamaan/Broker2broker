@@ -1,7 +1,7 @@
 # Deployment and first-run checklist
 
 **Status (2026-11-26):** The connected Supabase project `dfubbzyaoiwbbvkacwic` reports ACTIVE_HEALTHY; the three original migrations are present. The fixed-monthly and reminder migrations were applied and a production deployment was promoted. Existing user, listing and payment row counts remained unchanged. Full end-to-end testing remains outstanding. Do not send passwords or API keys in chat.
-**Pending branch changes:** `20261126230000_public_listings_enquiries.sql` and `20261126230100_web_push.sql` have not been applied to the connected production database. Test both against an isolated Supabase project first. Apply them in order before deploying this branch; do not deploy code that expects these tables/columns first. The existing production release is unchanged until then. Verify migration history and take a recovery-ready backup before any production change.
+**Pending branch changes:** `20261126230000_public_listings_enquiries.sql`, `20261126230100_web_push.sql`, and `20261127001000_complimentary_membership.sql` have not been applied to the connected production database. Test all three against an isolated Supabase project first. Apply them in order before deploying this branch; do not deploy code that expects these tables/columns first. The existing production release is unchanged until then. Verify migration history and take a recovery-ready backup before any production change.
 
 ## 1. Configure Supabase server access
 
@@ -85,3 +85,9 @@ GitHub Pages is not a backend host and is not suitable for this full app.
 ## Push rollout and operations
 
 Set VAPID keys only in the deployment environment after isolated end-to-end testing, and verify the key pair matches. Push subscriptions belong to one account per browser and may be disabled from Notifications before sign-out; lock-screen content is generic. The database queue stores notification references but not message content. The service deletes subscriptions on 404/410, and transient delivery failures are retried with a lease, up to five attempts. The daily cron processes up to 50 jobs per run, so backlogs can take days; enquiries also trigger a best-effort batch. Monitor backlog, cron failures, and provider errors; do not claim guaranteed or real-time delivery. Push endpoints are restricted to supported browser providers. Push subscription secrets are not included in snapshots; enquiries are included. Check the secure private backup policy before migration.
+
+## Complimentary access
+
+The original active developer can open Admin → Manage members → Grant access. Monthly grants are 30 days; yearly grants use the configured yearly duration. The developer must supply a reason, and an atomic database function records the grant, audit entry and notification. Grants extend an active expiry; they do not create a payment, count as revenue or approve pending requests. Admins can open each member’s payments and review UPI requests normally. The function is service-role-only and independently verifies the canonical developer. Apply the complimentary migration before deploying this code. Verify grants, retries, role denial and paid renewal in an isolated environment; real-service testing is still outstanding.
+
+A request for an isolated Supabase test branch returned a record marked as the default branch with the production project reference, not a distinct test database. Do not use or delete that record as a disposable test branch. Confirm an isolated non-production project with a separate reference before running destructive or write-based integration tests.
