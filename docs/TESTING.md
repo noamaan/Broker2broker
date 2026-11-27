@@ -79,3 +79,7 @@ Use a private preview deployment and test accounts for the original developer, o
 - [ ] Test the broker directory with free, active, expired and suspended accounts. Verify only active members receive contact fields from the API and suspended brokers are not listed.
 
 Automated local checks: `npm test`, `npm run typecheck`, and `npm run build`. In-memory database tests and worker simulations do not replace real-service and real-device testing.
+
+### Fictional property sandbox
+
+Run `npm run dev` and open `/demo-properties` to view clearly labelled Indian and international fictional examples, with local-only filters. This route is disabled in production builds. The examples are not inserted into Supabase and cannot be used to test database search, membership, broker contact or payments. All amounts are arbitrary INR placeholders, not foreign-currency support or property valuations. Use a separate non-production Supabase project and approved test accounts for real end-to-end listing tests.
