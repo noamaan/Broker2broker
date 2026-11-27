@@ -1,6 +1,7 @@
 # Deployment and first-run checklist
 
 **Status (2026-11-26):** The connected Supabase project `dfubbzyaoiwbbvkacwic` reports ACTIVE_HEALTHY; the three original migrations are present. The fixed-monthly and reminder migrations were applied and a production deployment was promoted. Existing user, listing and payment row counts remained unchanged. Full end-to-end testing remains outstanding. Do not send passwords or API keys in chat.
+**Navigation hotfix (2026-11-27):** Production deployment `dpl_EuMU1F2eU9yhjCbvp9tC7mkEBHvH` is based on the prior live release plus the three navigation/session files only (commit `ad34f094378f729a2390044221db1c7e97eb1957`). No database migration was applied. The full branch retains the additional features below; deploying its HEAD still requires the pending migration and integration checks. The authenticated live navigation still needs verification by a signed-in user on an actual device.
 **Pending branch changes:** `20261126230000_public_listings_enquiries.sql`, `20261126230100_web_push.sql`, `20261127001000_complimentary_membership.sql`, and `20261127002000_enquiry_owner_entitlement.sql` have not been applied to the connected production database. Test all four against an isolated Supabase project first. Apply them in order before deploying this branch; do not deploy code that expects these tables/columns first. The existing production release is unchanged until then. Verify migration history and take a recovery-ready backup before any production change.
 
 ## 1. Configure Supabase server access
