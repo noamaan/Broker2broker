@@ -8,7 +8,7 @@ export type { CurrentUser, Role } from "@/lib/types";
 export const SESSION_COOKIE = "b2b_session";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
 
-type TokenPayload = { sub: string; iat: number; exp: number; v: 1 };
+type TokenPayload = { sub: string; iat: number; exp: number; v: 1; sv?: number };
 export class HttpError extends Error {
   constructor(message: string, public status = 400, public code = "REQUEST_FAILED") { super(message); this.name = "HttpError"; }
 }
@@ -21,10 +21,10 @@ function secret() {
 function b64(value: string) { return Buffer.from(value).toString("base64url"); }
 function signature(value: string) { return createHmac("sha256", secret()).update(value).digest("base64url"); }
 
-export function createSessionToken(userID: string) {
+export function createSessionToken(userID: string, sessionVersion = 0) {
   const now = Math.floor(Date.now() / 1000);
   const header = b64(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const payload = b64(JSON.stringify({ sub: userID, iat: now, exp: now + SESSION_MAX_AGE, v: 1 } satisfies TokenPayload));
+  const payload = b64(JSON.stringify({ sub: userID, iat: now, exp: now + SESSION_MAX_AGE, v: 1, sv: sessionVersion } satisfies TokenPayload));
   const unsigned = `${header}.${payload}`;
   return `${unsigned}.${signature(unsigned)}`;
 }
@@ -40,14 +40,14 @@ export function verifySessionToken(token?: string): TokenPayload | null {
     if (expected.length !== provided.length || !timingSafeEqual(expected, provided)) return null;
     const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
     const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as TokenPayload;
-    if (header.alg !== "HS256" || payload.v !== 1 || typeof payload.sub !== "string" || !payload.sub || payload.exp <= Math.floor(Date.now() / 1000)) return null;
+    if (header.alg !== "HS256" || payload.v !== 1 || typeof payload.sub !== "string" || !payload.sub || (payload.sv !== undefined && (!Number.isSafeInteger(payload.sv) || payload.sv < 0)) || payload.exp <= Math.floor(Date.now() / 1000)) return null;
     return payload;
   } catch { return null; }
 }
 
-export async function setSessionCookie(userID: string) {
+export async function setSessionCookie(userID: string, sessionVersion = 0) {
   const jar = await cookies();
-  jar.set(SESSION_COOKIE, createSessionToken(userID), {
+  jar.set(SESSION_COOKIE, createSessionToken(userID, sessionVersion), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
@@ -67,18 +67,20 @@ export async function getSessionSubject(): Promise<string | null> {
 }
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
-  const userID = await getSessionSubject();
-  if (!userID) return null;
-  const user = await backendRequest<CurrentUser | null>("auth.getById", { userID });
-  if (!user || user.accountStatus !== "ACTIVE") return null;
+  const jar = await cookies();
+  const token = verifySessionToken(jar.get(SESSION_COOKIE)?.value);
+  if (!token) return null;
+  const user = await backendRequest<CurrentUser | null>("auth.getById", { userID: token.sub });
+  if (!user || user.accountStatus !== "ACTIVE" || (token.sv ?? 0) !== (user.sessionVersion ?? 0)) return null;
   return user;
 }
 
 export async function requireUser(roles?: Role[]): Promise<CurrentUser> {
-  const userID = await getSessionSubject();
-  if (!userID) throw new HttpError("Please sign in to continue.", 401, "UNAUTHENTICATED");
-  const user = await backendRequest<CurrentUser | null>("auth.getById", { userID });
-  if (!user || user.accountStatus !== "ACTIVE") throw new HttpError("Your session is no longer active. Please sign in again.", 401, "SESSION_INVALID");
+  const jar = await cookies();
+  const token = verifySessionToken(jar.get(SESSION_COOKIE)?.value);
+  if (!token) throw new HttpError("Please sign in to continue.", 401, "UNAUTHENTICATED");
+  const user = await backendRequest<CurrentUser | null>("auth.getById", { userID: token.sub });
+  if (!user || user.accountStatus !== "ACTIVE" || (token.sv ?? 0) !== (user.sessionVersion ?? 0)) throw new HttpError("Your session is no longer active. Please sign in again.", 401, "SESSION_INVALID");
   if (roles && !roles.includes(user.role)) throw new HttpError("You do not have permission to access this area.", 403, "FORBIDDEN");
   if (user.maintenanceMode && user.role === "USER") throw new HttpError("The platform is in scheduled maintenance. Please try again shortly.", 503, "MAINTENANCE_MODE");
   return user;

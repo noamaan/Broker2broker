@@ -14,7 +14,7 @@ const nextConfig: NextConfig = {
         ...(process.env.NODE_ENV === "production" ? [{ key: "X-Frame-Options", value: "DENY" }] : []),
         { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" }
       ]
-    }];
+    }, { source: "/reset-password", headers: [{ key: "Referrer-Policy", value: "no-referrer" }, { key: "Cache-Control", value: "no-store" }, { key: "X-Robots-Tag", value: "noindex, nofollow" }] }];
   }
 };
 

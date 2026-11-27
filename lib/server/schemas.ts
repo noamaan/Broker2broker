@@ -14,6 +14,7 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({ email, password: z.string().min(1).max(128), scope: z.enum(["member", "developer"]).default("member") });
 export const resetRequestSchema = z.object({ email });
 export const resetCompleteSchema = z.object({ token: z.string().min(24).max(200), password });
+export const adminPasswordResetSchema = z.object({ userID: id });
 export const passwordChangeSchema = z.object({ currentPassword: z.string().min(1).max(128), password });
 export const profileSchema = z.object({ fullName: z.string().trim().min(2).max(100), mobile: phone, agencyName: z.string().trim().min(2).max(120), whatsappNumber: phone, city: z.string().trim().min(2).max(80), preferredLocalities: z.array(z.string().trim().min(2).max(80)).max(20), bio: safeText(1000).optional(), languages: z.array(z.string().trim().max(40)).max(12).optional(), specialties: z.array(z.string().trim().max(60)).max(12).optional() });
 export const paymentRequestSchema = z.object({ plan: z.enum(["MONTHLY", "YEARLY"]), expectedAmount: z.number().int().min(1).max(1000000), utr: z.string().trim().min(6).max(80).regex(/^[a-zA-Z0-9\-/. ]+$/, "Enter the UPI transaction reference only"), paymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a valid payment date"), screenshotFileID: z.string().trim().max(120).optional().default("") });

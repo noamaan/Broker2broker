@@ -1,6 +1,7 @@
 export type Role = "USER" | "ADMIN" | "DEVELOPER";
 export type CurrentUser = {
   userID: string;
+  sessionVersion?: number; // Server-only; excluded from publicUser.
   fullName: string;
   mobile: string;
   email: string;

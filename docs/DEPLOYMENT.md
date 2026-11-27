@@ -1,8 +1,10 @@
 # Deployment and first-run checklist
 
 **Status (2026-11-26):** The connected Supabase project `dfubbzyaoiwbbvkacwic` reports ACTIVE_HEALTHY; the three original migrations are present. The fixed-monthly and reminder migrations were applied and a production deployment was promoted. Existing user, listing and payment row counts remained unchanged. Full end-to-end testing remains outstanding. Do not send passwords or API keys in chat.
-**Navigation hotfix (2026-11-27):** Production deployment `dpl_EuMU1F2eU9yhjCbvp9tC7mkEBHvH` is based on the prior live release plus the three navigation/session files only (commit `ad34f094378f729a2390044221db1c7e97eb1957`). No database migration was applied. The full branch retains the additional features below; deploying its HEAD still requires the pending migration and integration checks. The authenticated live navigation still needs verification by a signed-in user on an actual device.
-**Database migrations:** `20261127003430_public_listings_enquiries.sql`, `20261127003445_web_push.sql`, `20261127003507_complimentary_membership.sql`, and `20261127003520_enquiry_owner_entitlement.sql` were applied in order to the production database. Automated PGlite tests passed, and production row counts, access grants and service health were checked. These tests are not a substitute for real-service end-to-end testing. A restricted, RLS-enabled data snapshot is stored in schema `b2b_release_snapshot_20261127` within the same database; it is not an independent disaster-recovery backup, excludes file bytes, contains sensitive data and requires a controlled restoration process. Preserve and protect it until an independently verified backup and recovery plan exists. Production deployment of the full branch is not yet verified.
+**Earlier navigation hotfix (2026-11-27):** Production deployment `dpl_EuMU1F2eU9yhjCbvp9tC7mkEBHvH` is based on the prior live release plus the three navigation/session files only (commit `ad34f094378f729a2390044221db1c7e97eb1957`). No database migration was applied. The full branch retains the additional features below; the later full-branch deployment includes these features. The authenticated live navigation still needs verification by a signed-in user on an actual device.
+**Database migrations:** `20261127003430_public_listings_enquiries.sql`, `20261127003445_web_push.sql`, `20261127003507_complimentary_membership.sql`, and `20261127003520_enquiry_owner_entitlement.sql` were applied in order to the production database. Automated PGlite tests passed, and production row counts, access grants and service health were checked. These tests are not a substitute for real-service end-to-end testing. A restricted, RLS-enabled data snapshot is stored in schema `b2b_release_snapshot_20261127` within the same database; it is not an independent disaster-recovery backup, excludes file bytes, contains sensitive data and requires a controlled restoration process. Preserve and protect it until an independently verified backup and recovery plan exists. The full branch was promoted in production as deployment `dpl_9sds9WtUktq66y4NYLe6KZpQryYP`.
+
+**Admin-assisted password reset:** Migration `20261127004225_admin_password_reset.sql` was applied to the existing production database. Existing sessions remain valid until a reset is completed for that account. The updated application must also be deployed before relying on this feature.
 
 ## 1. Configure Supabase server access
 
@@ -23,13 +25,13 @@ Create `.env.local` for development or set these under the hosting provider's **
 | `B2B_DEVELOPER_BOOTSTRAP_TOKEN` | First run only | One-time random value of at least 32 characters. Remove it after developer setup succeeds. |
 | `APP_BASE_URL` | Yes for reset links | Exact public HTTPS origin, no trailing slash. Use `http://localhost:3000` only for local development. |
 | `CRON_SECRET` | Yes for scheduled tasks | Separate random value of at least 32 bytes. Vercel sends it as `Authorization: Bearer ...` to the daily cron route. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM` | Needed for password reset | SMTP delivery configuration. Set credentials only on the server; port defaults to 587. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM` | Not required for admin-assisted reset | Optional server-only SMTP configuration; the current recovery flow does not email reset links. |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Optional for Web Push | Generate a unique VAPID pair with `npx web-push generate-vapid-keys`; set the public and private values in server environment variables, and set the subject to a real `mailto:` contact or HTTPS URL. Never commit the private key. Keep the pair stable; rotation requires users to re-subscribe. |
 | `AI_API_KEY` | Optional | Server-only key for an OpenAI-compatible chat-completions service. |
 | `AI_MODEL` | Optional | Model identifier supported by that provider. |
 | `AI_BASE_URL` | Optional | HTTPS chat-completions endpoint. If omitted, the app uses the default endpoint. |
 
-The AI provider/model selection is stored in Supabase settings. AI credentials and SMTP credentials remain in environment variables. If SMTP is not configured, password-reset requests for existing accounts return an email configuration error; configure and test mail delivery before inviting members.
+The AI provider/model selection is stored in Supabase settings. AI and SMTP credentials remain in environment variables. For forgotten passwords, members contact an admin. After verifying the account owner, an admin uses Manage members → Reset password and privately shares the one-use, 30-minute link; the member chooses their own password. Admins may reset active USER accounts only; the original developer may also issue links for admins. Developer accounts cannot be reset by staff. A completed reset invalidates the target’s existing sessions. Never record or share passwords or reset links in audit logs. Signed-in users can still change their own password in settings.
 
 For local development:
 
@@ -62,13 +64,13 @@ Snapshots contain private database rows (including password hashes and payment r
 
 ## 6. Private GitHub repository and Vercel deployment
 
-The existing Vercel project `broker2broker` is linked to `noamaan/Broker2broker`, with `main` as its production branch. Preserve the existing production deployment until the full test checklist passes. Use a private preview and isolated test data; confirm the preview has correctly scoped server-only environment variables. Do not commit secrets or expose them to browser code. Verify cron support, UPI settings and SMTP before production rollout.
+The existing Vercel project `broker2broker` is linked to `noamaan/Broker2broker`, with `main` as its production branch. Preserve the existing production deployment until the full test checklist passes. Use a private preview and isolated test data; confirm the preview has correctly scoped server-only environment variables. Do not commit secrets or expose them to browser code. Verify cron support, UPI settings and the admin-assisted reset flow before production rollout.
 GitHub Pages is not a backend host and is not suitable for this full app.
 
 ## 7. Before live launch
 
 - Configure actual UPI/WhatsApp values and test with controlled low-value transactions; the application must not auto-verify funds.
-- Test password-reset mail delivery and one-time link expiry.
+- Test admin-assisted reset authorization, secure link delivery, one-time use, expiry, and session revocation.
 - Verify RLS/table grants, private bucket access, Vercel cron authorization, manual snapshot creation and recovery steps.
 - Review Terms, Privacy and Refund Policy with qualified Indian counsel and insert operating-entity/support details.
 - Confirm applicable tax, consumer, privacy and data-retention obligations with advisors.

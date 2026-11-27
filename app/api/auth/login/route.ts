@@ -5,7 +5,7 @@ import { requestMetadata } from "@/lib/server/request-meta";
 import { verifyPassword } from "@/lib/server/password";
 import { loginSchema } from "@/lib/server/schemas";
 export const runtime = "nodejs";
-type AuthRecord = { userID: string; email: string; passwordHash: string; passwordSalt: string; role: string; accountStatus: string };
+type AuthRecord = { userID: string; email: string; passwordHash: string; passwordSalt: string; sessionVersion: number; role: string; accountStatus: string };
 export async function POST(request: Request) {
   try {
     enforceSameOrigin(request);
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       return Response.json({ error: { code: "FORBIDDEN", message: "Developer access is not available for this account." } }, { status: 403, headers: { "Cache-Control": "no-store" } });
     }
     const user = await backendRequest<CurrentUser>("auth.loginSuccess", { userID: record.userID });
-    await setSessionCookie(user.userID);
+    await setSessionCookie(user.userID, record.sessionVersion);
     return ok({ user: publicUser(user) });
   } catch (e) { return apiError(e); }
 }

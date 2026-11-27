@@ -29,7 +29,7 @@ Use a private preview deployment and test accounts for the original developer, o
 - [ ] Confirm public app pages render while missing backend secrets fail closed with a configuration error; no fake member/listing/payment data appears.
 - [ ] Bootstrap the original developer once. Verify the token is removed from hosting settings after use, a second bootstrap fails, normal registration cannot choose a role, and an Admin cannot enter `/developer-control`.
 - [ ] Check bad password, suspended user, expired session, missing Supabase key, repeated login attempts and password reset expiry. Verify passwords remain salted/hashed, session cookies are HttpOnly/Secure in production, and security logs contain no raw IP address or password.
-- [ ] Configure SMTP and test reset emails before enabling password recovery. Confirm the reset token is one-use and valid for 30 minutes only.
+- [ ] Verify a member can contact an admin for a reset. After identity verification, an admin issues and privately shares a one-use, 30-minute link; only the member chooses the new password. Confirm cross-role restrictions, expiry, replay rejection, session revocation, and that no reset token or password appears in logs.
 - [ ] Verify an Admin cannot grant/revoke Admin through an admin endpoint, cannot modify the original developer and cannot change developer-only settings.
 - [ ] Confirm anon/authenticated roles cannot query application tables or private Storage directly; only the server key can access them.
 

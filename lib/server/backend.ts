@@ -45,7 +45,7 @@ async function securityLog(actorID: string, eventType: string, subject: string, 
 
 const RATE_LIMITS: Record<string, [number, number]> = {
   "auth.getByEmail": [12, 600], "auth.register": [6, 3600], "auth.reset.request": [4, 3600],
-  "auth.reset.complete": [6, 3600], "auth.changePassword": [6, 3600], "ai.context": [12, 60],
+  "auth.reset.complete": [6, 3600], "admin.issuePasswordReset": [20, 3600], "auth.changePassword": [6, 3600], "ai.context": [12, 60],
   "payment.createRequest": [6, 3600], "developer.grantMembership": [30, 3600], "push.rate": [20, 3600], "enquiries.create": [15, 3600], "listings.public": [120, 60], "files.public": [240, 60], "listings.search": [60, 60], "files.upload": [12, 3600]
 };
 async function rateLimit(action: string, data: Data) {
@@ -168,7 +168,7 @@ async function requireMember(userID: string) {
 }
 function mapPublicUser(row: Row, status: string, profile: Row | null, maintenanceMode: boolean): CurrentUser {
   return {
-    userID: str(row.user_id), fullName: str(row.full_name), mobile: str(row.mobile), email: str(row.email), agencyName: str(row.agency_name),
+    userID: str(row.user_id), sessionVersion: num(row.session_version), fullName: str(row.full_name), mobile: str(row.mobile), email: str(row.email), agencyName: str(row.agency_name),
     whatsappNumber: str(row.whatsapp_number), city: str(row.city), preferredLocalities: arr(row.preferred_localities).map(String),
     role: str(row.role, "USER") as Role, accountStatus: str(row.account_status, "ACTIVE"), membershipStatus: status,
     currentPlan: str(row.current_plan, "FREE"), membershipStartAt: dateString(row.membership_start_at),
@@ -464,8 +464,8 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
     }
     case "auth.getByEmail": {
       const email = str(data.email).trim().toLowerCase();
-      const row = await dbResult<Row | null>(client.from("users").select("user_id,email,password_hash,password_salt,role,account_status").eq("email", email).maybeSingle());
-      return row ? { userID: str(row.user_id), email: str(row.email), passwordHash: str(row.password_hash), passwordSalt: str(row.password_salt), role: str(row.role), accountStatus: str(row.account_status) } : null;
+      const row = await dbResult<Row | null>(client.from("users").select("user_id,email,password_hash,password_salt,role,account_status,session_version").eq("email", email).maybeSingle());
+      return row ? { userID: str(row.user_id), email: str(row.email), passwordHash: str(row.password_hash), passwordSalt: str(row.password_salt), sessionVersion: num(row.session_version), role: str(row.role), accountStatus: str(row.account_status) } : null;
     }
     case "auth.getById": return getPublicUser(str(data.userID));
     case "auth.getOwnCredentials": {
@@ -489,6 +489,14 @@ async function dispatch(action: string, data: Data): Promise<unknown> {
       await audit(str(actor.user_id), "PASSWORD_CHANGED", "USER", str(actor.user_id));
       await securityLog(str(actor.user_id), "PASSWORD_CHANGED", str(actor.email), { ipHash: data.ipHash, userAgent: data.userAgent, details: { source: "settings" } });
       return { changed: true };
+    }
+    case "admin.issuePasswordReset": {
+      const actor = await requireRole(str(data.actorID), ["ADMIN", "DEVELOPER"]);
+      const token = str(data.token);
+      if (token.length < 24 || token.length > 200) throw backendError("INVALID_INPUT", "Invalid reset token.");
+      const tokenHash = createHash("sha256").update(token).digest("hex");
+      await dbResult(client.rpc("b2b_admin_issue_password_reset", { p_actor_id: str(actor.user_id), p_user_id: str(data.userID), p_token_hash: tokenHash }));
+      return { issued: true };
     }
     case "auth.reset.request": {
       const email = str(data.email).trim().toLowerCase();
