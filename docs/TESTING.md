@@ -76,7 +76,8 @@ Use a private preview deployment and test accounts for the original developer, o
 
 ### PWA checks (before deployment)
 
-- [ ] On a secure preview, check the manifest and icon dimensions, then install on supported Android/desktop browsers and from Safari Share → Add to Home Screen on iOS. Check launch, navigation, sign-in and sign-out in standalone mode.
+- [ ] On a secure preview, check the manifest identity, dashboard start URL and any/maskable icon dimensions, then install on supported Android/desktop browsers and from Safari Share → Add to Home Screen on iOS. Check signed-out launch, sign-in and sign-out in standalone mode. Existing installs may need the browser to update their manifest.
+- [ ] On actual iOS and Android devices, verify the member workspace has a safe-area-aware top bar and bottom tabs, the More sheet opens and closes (including backdrops and keyboard Escape), all saved/membership/profile/admin links remain reachable, and forms are not obscured by system bars or the keyboard. The ordinary browser website and desktop layout should remain unchanged.
 - [ ] Go offline while installed; navigations must show the offline page, never a cached account, listing, file, or payment response. Reconnect and reload.
 - [ ] Deploy a worker update and confirm it takes control on a subsequent navigation. Check app behavior on mobile and safe-area devices.
 - [ ] In an isolated project, apply the new public/enquiry and push migrations, configure a test VAPID pair, then verify public previews show only explicitly opted-in, approved, unexpired listings. Existing rows must stay private; images must disappear immediately when listing visibility changes. Confirm free users cannot retrieve member details, contacts or private files, and test owner/suspended/expired/pending cases.

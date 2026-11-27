@@ -82,7 +82,7 @@ export function SiteHeader() {
       <button type="button" onClick={signOut} disabled={signingOut} className="btn-secondary !py-2.5">{signingOut ? "Signing out…" : "Sign out"}</button>
     </>;
   };
-  return <header className="sticky top-0 z-40 border-b border-slate-100 bg-white/95 backdrop-blur-xl">
+  return <header className={`site-header ${pathname === "/dashboard" || pathname.startsWith("/dashboard/") ? "member-site-header" : ""} sticky top-0 z-40 border-b border-slate-100 bg-white/95 backdrop-blur-xl`}>
     <div className="container-page flex h-[72px] items-center justify-between gap-5">
       <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label={`${BRAND_NAME} home`} onClick={() => setOpen(false)}>
         <span className="grid h-10 w-10 place-items-center rounded-xl bg-navy-900 text-white"><Building2 size={21} strokeWidth={2.1} /></span>

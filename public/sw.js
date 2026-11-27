@@ -1,5 +1,5 @@
 /* Cache only an anonymous offline fallback. Never cache account pages, API responses or private files. */
-const CACHE = 'b2b-offline-v1';
+const CACHE = 'b2b-offline-v2';
 const OFFLINE = '/offline.html';
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.add(OFFLINE)).then(() => self.skipWaiting()));

@@ -1,9 +1,13 @@
+"use client";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Building2, ArrowUpRight } from "lucide-react";
 import { DEVELOPER_CREDIT, TAGLINE } from "@/lib/branding";
 
 export function SiteFooter() {
-  return <footer className="mt-24 border-t border-slate-200 bg-slate-50">
+  const pathname = usePathname();
+  const memberArea = pathname === "/dashboard" || pathname.startsWith("/dashboard/");
+  return <footer className={`site-footer ${memberArea ? "member-site-footer" : ""} mt-24 border-t border-slate-200 bg-slate-50`}>
     <div className="container-page grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr]">
       <div>
         <Link href="/" className="flex items-center gap-2.5">
