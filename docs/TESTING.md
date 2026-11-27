@@ -89,3 +89,8 @@ Automated local checks: `npm test`, `npm run typecheck`, and `npm run build`. In
 ### Fictional property sandbox
 
 Run `npm run dev` and open `/demo-properties` to view clearly labelled Indian and international fictional examples, with local-only filters. This route is disabled in production builds. The examples are not inserted into Supabase and cannot be used to test database search, membership, broker contact or payments. All amounts are arbitrary INR placeholders, not foreign-currency support or property valuations. Use a separate non-production Supabase project and approved test accounts for real end-to-end listing tests.
+
+### Site navigation session state
+
+- Automated DOM tests exercise mobile and desktop navigation with the real signed-session verifier and an isolated, mocked account backend. They cover signed-out, login, active session, logout, cross-tab notification, tampered cookie and an offline refresh. These tests do not use a real Supabase account or a real mobile device.
+- [ ] In a safely configured authenticated preview, sign in with a dedicated test account and verify the public header on desktop and mobile, including after navigation, sign-out and signing in from another tab. Verify a private/logged-out window still offers login and registration. Do not share passwords or session cookies.
