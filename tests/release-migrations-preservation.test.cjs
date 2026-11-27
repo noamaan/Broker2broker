@@ -21,7 +21,7 @@ test('pending release migrations retain existing paid account data and keep list
       values('listing','member','Existing listing','SALE','Flat','Mira Road','Mira Road','ACTIVE');`);
   const before = (await db.query(`select u.membership_status,u.current_plan,u.membership_expires_at,s.payment_id,s.payment_request_id,s.amount,p.status as payment_status,r.status as request_status
     from users u join subscriptions s on s.user_id=u.user_id join payments p on p.payment_id=s.payment_id join payment_requests r on r.request_id=s.payment_request_id where u.user_id='member'`)).rows[0];
-  for (const file of ['20261126230000_public_listings_enquiries.sql','20261126230100_web_push.sql','20261127001000_complimentary_membership.sql','20261127002000_enquiry_owner_entitlement.sql']) {
+  for (const file of ['20261127003430_public_listings_enquiries.sql','20261127003445_web_push.sql','20261127003507_complimentary_membership.sql','20261127003520_enquiry_owner_entitlement.sql']) {
     await db.exec(fs.readFileSync(`supabase/migrations/${file}`, 'utf8'));
   }
   const after = (await db.query(`select u.membership_status,u.current_plan,u.membership_expires_at,s.payment_id,s.payment_request_id,s.amount,p.status as payment_status,r.status as request_status

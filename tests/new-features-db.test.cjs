@@ -25,9 +25,9 @@ test('public opt-in, enquiries and push queue use isolated transactional databas
     insert into public.listings(listing_id,owner_id,title,transaction_type,property_type,city,locality,status,reconfirm_due_at) values
     ('private','owner','Private apartment','SALE','Apartment','Mira Road','Mira Road','ACTIVE',now()+interval '1 day'),
     ('pending','owner','Pending apartment','SALE','Apartment','Mira Road','Mira Road','PENDING_APPROVAL',now()+interval '1 day');`);
-  await db.exec(fs.readFileSync('supabase/migrations/20261126230000_public_listings_enquiries.sql','utf8'));
-  await db.exec(fs.readFileSync('supabase/migrations/20261126230100_web_push.sql','utf8'));
-  await db.exec(fs.readFileSync('supabase/migrations/20261127002000_enquiry_owner_entitlement.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261127003430_public_listings_enquiries.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261127003445_web_push.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261127003520_enquiry_owner_entitlement.sql','utf8'));
   assert.equal((await db.query("select is_public from listings where listing_id='private'")).rows[0].is_public,false);
   await db.exec("insert into push_subscriptions(subscription_id,user_id,endpoint,p256dh,auth_key) values('sub','owner','https://fcm.googleapis.com/example','key','auth')");
   const send=(actor,listing,message='Please contact me about this listing.')=>db.query('select b2b_create_enquiry($1,$2,$3) as id',[actor,listing,message]);
