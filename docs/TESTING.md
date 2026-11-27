@@ -2,22 +2,10 @@
 
 ## Current review (2026-11-26)
 
-- The connected Supabase project is healthy. Read-only checks show the original three migrations and RLS enabled on all 21 public tables. At the earlier review the live database contained four users and no listings or payment records; a later read-only check showed four users, no listings, two payment requests, one payment and one subscription. These are live records, not test fixtures; no live user or payment rows were changed during this review.
+- The connected Supabase project is healthy. Read-only checks show the original three migrations and RLS enabled on all 21 public tables. The live database contains four users, no listings and no payment requests, payments or subscriptions. No live records were changed during this review.
 - The fixed-monthly and renewal-reminder migrations were applied to the connected database. Existing user, listing and payment row counts remained unchanged; real-service end-to-end testing is still outstanding.
-- `npm test` exercises the actual payment SQL against an isolated in-memory PostgreSQL instance, including fixed monthly pricing, pending status, approval, duplicate references, replay, renewal, rejection and reminder deduplication. It also simulates service-worker caching. Branch tests also exercise the new SQL privacy defaults, enquiry authorization, push queue leases and worker payload handling. These are not full browser/API integration tests.
-- The Vercel project has production-scoped backend/session/cron variable names, but no SMTP configuration was listed. Secret values have not been inspected or verified. The GitHub repository is public; avoid committing private information or credentials.
-
-### Membership access controls
-
-- Automated backend-adapter tests cover free, pending, rejected, expired, suspended and active users, including direct API actions, owner expiry, free directory contact redaction and the ability to withdraw one's own listing. SQL tests check that an enquiry cannot be sent to an expired listing owner. These are isolated/mocked checks, not live Supabase end-to-end tests.
-- [ ] Verify all protected endpoints with signed-in free, pending, rejected, expired, suspended and active test accounts in an isolated Supabase-backed preview. Confirm an expired or suspended listing owner’s details and images are hidden from other users, pending payment does not unlock access, renewal restores only eligible listings, and withdrawal/deletion remains available to the owner.
-- [ ] Check profile fields for possible contact-detail leakage in the free broker directory; automated redaction cannot detect every way a person may encode contact information.
-
-### Complimentary membership review
-
-- Automated isolated PostgreSQL tests cover developer authorization, suspended users, fixed monthly term, idempotent retries, pending requests, audit/notification, no fabricated payment and renewal with verified UPI. Component rendering tests check that administrators do not see the grant button and both roles can open member-specific payments.
-- [ ] On an isolated Supabase-backed preview, authenticate as developer, admin, member and suspended member. Verify the full UI/API grant flow, server-side denials, retries after interrupted responses, reason audit, member-visible access, UPI request review and role isolation. Verify mobile layout and payment approval separately.
-- [ ] Apply migrations and publish only after the above and the existing membership/PWA checklist pass. Never use real users or payment evidence for testing.
+- `npm test` exercises the actual payment SQL against an isolated in-memory PostgreSQL instance, including fixed monthly pricing, pending status, approval, duplicate references, replay, renewal, rejection and reminder deduplication. It also simulates service-worker caching. These are not full browser/API integration tests.
+- The Vercel project has production-scoped backend/session/cron variable names, but no SMTP configuration was listed. Secret values have not been inspected or verified. The GitHub repository is public.
 
 ## Before inviting real members
 
@@ -79,18 +67,7 @@ Use a private preview deployment and test accounts for the original developer, o
 - [ ] On a secure preview, check the manifest and icon dimensions, then install on supported Android/desktop browsers and from Safari Share → Add to Home Screen on iOS. Check launch, navigation, sign-in and sign-out in standalone mode.
 - [ ] Go offline while installed; navigations must show the offline page, never a cached account, listing, file, or payment response. Reconnect and reload.
 - [ ] Deploy a worker update and confirm it takes control on a subsequent navigation. Check app behavior on mobile and safe-area devices.
-- [ ] In an isolated project, apply the new public/enquiry and push migrations, configure a test VAPID pair, then verify public previews show only explicitly opted-in, approved, unexpired listings. Existing rows must stay private; images must disappear immediately when listing visibility changes. Confirm free users cannot retrieve member details, contacts or private files, and test owner/suspended/expired/pending cases.
-- [ ] Send enquiries as active, free, expired, suspended and owning users; verify authorization, rate limits, notification, recipient-only and sender-only history, and pagination. Confirm the snapshot includes enquiries.
-- [ ] On a secure preview and actual Android, desktop and iOS Home Screen app, grant and deny push permission, enable/disable, switch accounts on the same browser, trigger a notification, test click-through, revocation, 404/410 cleanup, retry and daily expiry reminder. Verify generic lock-screen text. Push depends on VAPID settings and cron; delivery and device support are not yet verified.
+- [ ] Push delivery is **not implemented**: do not claim notification support or request permission until subscription storage, delivery, expiry reminders and end-to-end tests are in place. Existing in-app notifications are separate.
 - [ ] Test the broker directory with free, active, expired and suspended accounts. Verify only active members receive contact fields from the API and suspended brokers are not listed.
 
 Automated local checks: `npm test`, `npm run typecheck`, and `npm run build`. In-memory database tests and worker simulations do not replace real-service and real-device testing.
-
-### Fictional property sandbox
-
-Run `npm run dev` and open `/demo-properties` to view clearly labelled Indian and international fictional examples, with local-only filters. This route is disabled in production builds. The examples are not inserted into Supabase and cannot be used to test database search, membership, broker contact or payments. All amounts are arbitrary INR placeholders, not foreign-currency support or property valuations. Use a separate non-production Supabase project and approved test accounts for real end-to-end listing tests.
-
-### Site navigation session state
-
-- Automated DOM tests exercise mobile and desktop navigation with the real signed-session verifier and an isolated, mocked account backend. They cover signed-out, login, active session, logout, cross-tab notification, tampered cookie and an offline refresh. These tests do not use a real Supabase account or a real mobile device.
-- [ ] In a safely configured authenticated preview, sign in with a dedicated test account and verify the public header on desktop and mobile, including after navigation, sign-out and signing in from another tab. Verify a private/logged-out window still offers login and registration. Do not share passwords or session cookies.

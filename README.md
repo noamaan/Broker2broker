@@ -63,7 +63,7 @@ npm run build
 - All application tables have RLS enabled; browser roles receive no table access. Only the server holds the Supabase secret/service-role key.
 - Application roles and membership status are re-checked against PostgreSQL on protected operations. The custom session cookie is signed, HttpOnly and Secure in production.
 - Listing contact numbers are returned only to active members, the listing owner or authorized staff. Server-side rate limits use Supabase/PostgreSQL.
-- Listing images, payment screenshots and database snapshots are private Storage objects; opted-in approved listings may expose their selected images through a server-checked public preview. Snapshots contain private database records (including password hashes) and must be treated as sensitive credentials; image contents are not included in the JSON snapshot.
+- Listing images, payment screenshots and database snapshots are private Storage objects. Snapshots contain private database records (including password hashes) and must be treated as sensitive credentials; image contents are not included in the JSON snapshot.
 - Do not store Supabase secrets, session secrets, SMTP passwords, AI credentials or bootstrap tokens in browser settings, public source, or a Git repository.
 - Visual listing watermarks are deterrents only. Screenshots and manual copying cannot be completely prevented.
 - AI provider credentials are server-only. If an AI-compatible provider is configured, submitted message text is sent to that provider. Review the privacy policy and provider terms before enabling it.
@@ -82,7 +82,7 @@ docs/                    Deployment and testing guides
 
 ## PWA and rollout status
 
-The app includes a web manifest, icons, install guidance, mobile workspace navigation and a network-first service worker. Only the generic offline page is cached; private listings, account pages and API responses are not made available offline. Android/desktop install prompts depend on browser support; iOS uses Safari's Share → Add to Home Screen. This branch adds opt-in public previews, member enquiries and consent-based Web Push, pending the new database migrations, VAPID configuration, and real-device end-to-end tests. Push is best-effort and may be delayed until the daily cron. Existing listings remain private by default.
+The app includes a web manifest, icons, install guidance, mobile workspace navigation and a network-first service worker. Only the generic offline page is cached; private listings, account pages and API responses are not made available offline. Android/desktop install prompts depend on browser support; iOS uses Safari's Share → Add to Home Screen. Push notifications are not yet implemented; the existing notification center is in-app only.
 
 The live schema is reachable, but authentication and payment workflows have not yet been verified end-to-end. Do not deploy this branch to production until the project owner checks the project status, verifies existing migrations and data, configures UPI details, and completes the private-preview checklist in `docs/TESTING.md`. Required server configuration remains listed in `.env.example`; SMTP is needed for password reset. No production credentials or payment details are embedded in this repository.
 

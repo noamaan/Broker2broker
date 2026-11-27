@@ -9,7 +9,6 @@ import { apiFetch, AUTH_CHANGED_EVENT, AUTH_CHANGED_STORAGE_KEY } from "@/lib/cl
 
 type SessionState = "checking" | "signed-out" | "signed-in";
 const links = [
-  ["Properties", "/properties"],
   ["How it works", "/how-it-works"],
   ["About", "/about"],
   ["Pricing", "/pricing"],
