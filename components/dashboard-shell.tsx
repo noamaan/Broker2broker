@@ -12,6 +12,7 @@ const memberNav=[
   {href:"/dashboard/explore",label:"Explore properties",icon:Search},
   {href:"/dashboard/new-listing",label:"Add a listing",icon:FilePlus2},
   {href:"/dashboard/brokers",label:"Broker directory",icon:UsersRound},
+  {href:"/dashboard/enquiries",label:"Enquiries",icon:MessageSquareText},
   {href:"/dashboard/ai-converter",label:"AI converter",icon:MessageSquareText},
   {href:"/dashboard/my-listings",label:"My listings",icon:Building2},
   {href:"/dashboard/saved",label:"Saved properties",icon:Heart},
@@ -36,7 +37,7 @@ export function DashboardShell({user,children}:{user:CurrentUser;children:React.
         {children}
       </section>
     </div>
-    <nav aria-label="Quick navigation" className="fixed inset-x-0 bottom-0 z-40 flex justify-around border-t border-slate-200 bg-white/95 px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(16,39,68,.06)] backdrop-blur lg:hidden">{[memberNav[0],memberNav[1],memberNav[2],memberNav[6],memberNav[9]].map(({href,label,icon:Icon})=><Link key={href} href={href} aria-current={active(href)?"page":undefined} className={`flex min-w-0 flex-1 flex-col items-center gap-1 py-1 text-[10px] font-semibold ${active(href)?"text-leaf-700":"text-slate-500"}`}><Icon size={19}/><span>{href==="/dashboard"?"Home":href==="/dashboard/explore"?"Explore":href==="/dashboard/new-listing"?"Add":href==="/dashboard/saved"?"Saved":"Membership"}</span></Link>)}</nav>
+    <nav aria-label="Quick navigation" className="fixed inset-x-0 bottom-0 z-40 flex justify-around border-t border-slate-200 bg-white/95 px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(16,39,68,.06)] backdrop-blur lg:hidden">{[memberNav[0],memberNav[1],memberNav[2],memberNav[7],memberNav[10]].map(({href,label,icon:Icon})=><Link key={href} href={href} aria-current={active(href)?"page":undefined} className={`flex min-w-0 flex-1 flex-col items-center gap-1 py-1 text-[10px] font-semibold ${active(href)?"text-leaf-700":"text-slate-500"}`}><Icon size={19}/><span>{href==="/dashboard"?"Home":href==="/dashboard/explore"?"Explore":href==="/dashboard/new-listing"?"Add":href==="/dashboard/saved"?"Saved":"Membership"}</span></Link>)}</nav>
     <div className="h-20 lg:hidden" aria-hidden="true" />
   </div>;
 }

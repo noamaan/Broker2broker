@@ -1,0 +1,22 @@
+"use client";
+import { useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { Building2, MapPin, Search } from "lucide-react";
+import { AlertBox, EmptyState, LoadingState, useApiData } from "@/components/dashboard-ui";
+import { currency } from "@/lib/client/api";
+
+type Preview = { listingID:string; propertyType:string; bhk:string; city:string; locality:string; transactionType:string; price:number; rent:number; images:string[] };
+type Result = { items:Preview[]; page:number; hasMore:boolean };
+export function PublicProperties() {
+  const [form,setForm] = useState({q:"",city:"",bhk:"",transactionType:"",maxPrice:""});
+  const [filters,setFilters] = useState(form); const [page,setPage] = useState(1);
+  const url = useMemo(() => { const p = new URLSearchParams({page:String(page)}); Object.entries(filters).forEach(([k,v])=>{if(v) p.set(k,v);}); return `/api/public/properties?${p}`; },[filters,page]);
+  const {data,loading,error} = useApiData<Result>(url);
+  function submit(e:FormEvent) { e.preventDefault(); setPage(1); setFilters(form); }
+  function set(key:keyof typeof form,value:string) { setForm(f=>({...f,[key]:value})); }
+  return <main className="container-page py-12 sm:py-16"><p className="eyebrow">Local opportunities</p><h1 className="section-title mt-3">Browse properties</h1><p className="section-copy mt-4">Explore public previews from our broker network. Full details and broker contacts are reserved for active members.</p>
+    <form onSubmit={submit} className="card mt-8 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6"><input aria-label="Locality" className="input" placeholder="Locality" value={form.q} onChange={e=>set("q",e.target.value)}/><input aria-label="City" className="input" placeholder="City" value={form.city} onChange={e=>set("city",e.target.value)}/><input aria-label="BHK" className="input" placeholder="BHK" value={form.bhk} onChange={e=>set("bhk",e.target.value)}/><select aria-label="Transaction" className="input" value={form.transactionType} onChange={e=>set("transactionType",e.target.value)}><option value="">Sale or rent</option><option value="SALE">Sale</option><option value="RESALE">Resale</option><option value="RENT">Rent</option><option value="COMMERCIAL_SALE">Commercial sale</option><option value="COMMERCIAL_RENT">Commercial rent</option><option value="LEASE">Lease</option></select><input aria-label="Maximum price" type="number" min="0" max="1000000000000" className="input" placeholder="Max price ₹" value={form.maxPrice} onChange={e=>set("maxPrice",e.target.value)}/><button className="btn-primary"><Search size={16}/>Search</button></form>
+    <p className="mt-3 text-xs text-slate-500">Maximum price applies to rent for rent listings, otherwise to sale price.</p><div className="mt-7">{loading?<LoadingState label="Loading properties…"/>:error?<AlertBox message={error}/>:!data?.items.length?<EmptyState icon={Building2} title="No public properties found" copy="Try another search or check back as brokers publish new opportunities."/>:<div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{data.items.map(item=><article className="card overflow-hidden" key={item.listingID}><div className="aspect-[16/10] bg-navy-50">{item.images[0]?<img className="h-full w-full object-cover" src={`/api/public/properties/${encodeURIComponent(item.listingID)}/images/${encodeURIComponent(item.images[0])}`} alt={`Property in ${item.locality}`}/>:<div className="grid h-full place-items-center text-navy-200"><Building2 size={40}/></div>}</div><div className="p-5"><span className="badge-green capitalize">{item.transactionType.replaceAll("_"," ").toLowerCase()}</span><h2 className="mt-3 text-lg font-semibold text-navy-900">{item.bhk} {item.propertyType}</h2><p className="mt-1 flex items-center gap-1 text-sm text-slate-500"><MapPin size={14}/>{item.locality}, {item.city}</p><p className="mt-4 font-bold text-navy-900">{item.rent ? `${currency(item.rent)} / month` : item.price ? currency(item.price) : "Price on request"}</p><Link className="btn-secondary mt-4 w-full" href={`/dashboard/explore/${encodeURIComponent(item.listingID)}`}>View member details</Link></div></article>)}</div>}</div>
+    <div className="mt-6 flex gap-3"><button className="btn-secondary" disabled={page===1} onClick={()=>setPage(p=>p-1)}>Previous</button><button className="btn-secondary" disabled={!data?.hasMore} onClick={()=>setPage(p=>p+1)}>Next</button></div>
+  </main>;
+}

@@ -19,10 +19,10 @@ export const profileSchema = z.object({ fullName: z.string().trim().min(2).max(1
 export const paymentRequestSchema = z.object({ plan: z.enum(["MONTHLY", "YEARLY"]), expectedAmount: z.number().int().min(1).max(1000000), utr: z.string().trim().min(6).max(80).regex(/^[a-zA-Z0-9\-/. ]+$/, "Enter the UPI transaction reference only"), paymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a valid payment date"), screenshotFileID: z.string().trim().max(120).optional().default("") });
 
 export const listingSchema = z.object({
-  title: z.string().trim().min(4).max(140), transactionType: z.enum(["RENT", "SALE", "RESALE", "HEAVY_DEPOSIT", "LEASE", "COMMERCIAL_RENT", "COMMERCIAL_SALE"]),
-  propertyType: z.string().trim().min(2).max(80), bhk: safeText(20).optional().default(""), city: z.string().trim().min(2).max(80), locality: z.string().trim().min(2).max(100), landmark: safeText(120).optional().default(""),
-  carpetArea: safeText(30).optional().default(""), builtUpArea: safeText(30).optional().default(""), furnishing: z.enum(["FURNISHED", "SEMI_FURNISHED", "UNFURNISHED", "NOT_SPECIFIED"]).default("NOT_SPECIFIED"), floor: safeText(40).optional().default(""), amenities: z.array(z.string().trim().max(60)).max(30).default([]),
-  price: safeText(20).optional().default(""), rent: safeText(20).optional().default(""), deposit: safeText(20).optional().default(""), availability: safeText(80).optional().default(""), tenantPreference: safeText(100).optional().default(""), contactNumbers: z.array(phone).max(10).default([]), description: safeText(3000).optional().default(""), originalText: safeText(12000).optional().default(""), images: z.array(z.string().trim().max(120)).max(10).default([])
+  isPublic: z.boolean().optional(), title: z.string().trim().min(4).max(140), transactionType: z.enum(["RENT", "SALE", "RESALE", "HEAVY_DEPOSIT", "LEASE", "COMMERCIAL_RENT", "COMMERCIAL_SALE"]),
+  propertyType: z.string().trim().min(2).max(80), bhk: safeText(20).optional(), city: z.string().trim().min(2).max(80), locality: z.string().trim().min(2).max(100), landmark: safeText(120).optional(),
+  carpetArea: safeText(30).optional(), builtUpArea: safeText(30).optional(), furnishing: z.enum(["FURNISHED", "SEMI_FURNISHED", "UNFURNISHED", "NOT_SPECIFIED"]).optional(), floor: safeText(40).optional(), amenities: z.array(z.string().trim().max(60)).max(30).optional(),
+  price: safeText(20).optional(), rent: safeText(20).optional(), deposit: safeText(20).optional(), availability: safeText(80).optional(), tenantPreference: safeText(100).optional(), contactNumbers: z.array(phone).max(10).optional(), description: safeText(3000).optional(), originalText: safeText(12000).optional(), images: z.array(z.string().trim().max(120)).max(10).optional()
 });
 export const listingPatchSchema = listingSchema.partial().extend({ status: z.enum(["DRAFT", "ACTIVE", "SOLD", "RENTED", "UNAVAILABLE", "UNDER_REVIEW"]).optional(), confirmDuplicates: z.boolean().optional() });
 export const idSchema = z.object({ id });
@@ -48,3 +48,5 @@ export const localitySchema = z.object({ localityID: z.string().trim().max(100).
 export const notificationPatchSchema = z.object({ notificationID: id });
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type ListingInput = z.infer<typeof listingSchema>;
+
+export const enquirySchema = z.object({ listingID: id, message: z.string().trim().min(10).max(1000) });
